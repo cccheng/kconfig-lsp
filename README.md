@@ -49,17 +49,6 @@ vim.lsp.config.kconfig = {
 vim.lsp.enable('kconfig')
 ```
 
-### VS Code
-
-Use a generic LSP client extension (e.g. [vscode-languageclient](https://github.com/AshutoshPandey-Devops/vscode-languageclient)) with the following settings:
-
-```json
-{
-  "languageserver.kconfig.command": "kconfig-lsp",
-  "languageserver.kconfig.filetypes": ["kconfig"]
-}
-```
-
 ### Other Editors
 
 Any LSP client that communicates over stdio can launch `kconfig-lsp` directly:
