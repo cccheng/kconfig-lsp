@@ -285,7 +285,7 @@ fn collect_expr_refs(expr: &Expr, kind: RefKind, file: &Path, refs: &mut Vec<Sym
     let mut syms = Vec::new();
     expr.collect_symbols(&mut syms);
     for (name, span) in syms {
-        if is_tristate_literal(&name) || name.is_empty() {
+        if is_tristate_literal(&name) || name.is_empty() || is_numeric_literal(&name) {
             continue;
         }
         refs.push(SymbolRef {
@@ -299,4 +299,12 @@ fn collect_expr_refs(expr: &Expr, kind: RefKind, file: &Path, refs: &mut Vec<Sym
 
 fn is_tristate_literal(s: &str) -> bool {
     matches!(s, "y" | "n" | "m")
+}
+
+fn is_numeric_literal(s: &str) -> bool {
+    if s.starts_with("0x") || s.starts_with("0X") {
+        s.len() > 2 && s[2..].chars().all(|c| c.is_ascii_hexdigit())
+    } else {
+        !s.is_empty() && s.chars().all(|c| c.is_ascii_digit())
+    }
 }
