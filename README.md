@@ -22,6 +22,14 @@ Full coverage of the Kconfig grammar defined in `Documentation/kbuild/kconfig-la
 
 ## Installation
 
+### From crates.io
+
+```sh
+cargo install kconfig-lsp
+```
+
+### From source
+
 ```sh
 cargo build --release
 cp target/release/kconfig-lsp ~/.local/bin/
