@@ -85,7 +85,10 @@ impl LanguageServer for Backend {
                 }),
                 ..Default::default()
             },
-            ..Default::default()
+            server_info: Some(ServerInfo {
+                name: env!("CARGO_PKG_NAME").into(),
+                version: Some(env!("CARGO_PKG_VERSION").into()),
+            }),
         })
     }
 
