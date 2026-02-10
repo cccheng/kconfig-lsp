@@ -1,9 +1,12 @@
 [package]
 name = "kconfig-lsp"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "A language server for Kconfig files used in Linux, Zephyr, U-Boot, and coreboot"
+repository = "https://github.com/cccheng/kconfig-lsp"
+readme = "README.md"
 license = "MIT"
+keywords = ["kconfig", "lsp", "kernel"]
 
 [dependencies]
 tower-lsp = "0.20"
