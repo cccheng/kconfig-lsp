@@ -1,6 +1,6 @@
 use kconfig_lsp::analysis::WorldIndex;
 use kconfig_lsp::ast::*;
-use kconfig_lsp::lexer::Lexer;
+use kconfig_lsp::lexer::{Lexer, TypeKind};
 use kconfig_lsp::parser;
 use kconfig_lsp::settings::Settings;
 use std::path::Path;

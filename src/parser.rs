@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::lexer::{Token, TokenKind};
+use crate::lexer::{Token, TokenKind, TypeKind};
 
 pub struct ParseResult {
     pub file: KconfigFile,
@@ -169,8 +169,7 @@ impl<'a> Parser<'a> {
 
                 TokenKind::Prompt => attrs.push(self.parse_prompt_attr()),
                 TokenKind::Default => attrs.push(self.parse_default_attr()),
-                TokenKind::DefBool => attrs.push(self.parse_def_type_attr(TypeKind::Bool)),
-                TokenKind::DefTristate => attrs.push(self.parse_def_type_attr(TypeKind::Tristate)),
+                TokenKind::DefType(type_kind) => attrs.push(self.parse_def_type_attr(*type_kind)),
                 TokenKind::Depends => attrs.push(self.parse_depends_on()),
                 TokenKind::Select => attrs.push(self.parse_select_imply(true)),
                 TokenKind::Imply => attrs.push(self.parse_select_imply(false)),

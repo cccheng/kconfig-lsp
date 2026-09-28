@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use crate::lexer::TypeKind;
+
 /// Byte-offset span in source text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Span {
@@ -117,27 +119,6 @@ pub struct TypeAttr {
     pub kind: TypeKind,
     pub prompt: Option<PromptAttr>,
     pub span: Span,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TypeKind {
-    Bool,
-    Tristate,
-    String,
-    Hex,
-    Int,
-}
-
-impl TypeKind {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            TypeKind::Bool => "bool",
-            TypeKind::Tristate => "tristate",
-            TypeKind::String => "string",
-            TypeKind::Hex => "hex",
-            TypeKind::Int => "int",
-        }
-    }
 }
 
 #[derive(Debug, Clone)]

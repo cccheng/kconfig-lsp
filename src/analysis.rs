@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::ast::*;
-use crate::lexer::Lexer;
+use crate::lexer::{Lexer, TypeKind};
 use crate::parser;
 use crate::settings::Settings;
 

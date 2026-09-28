@@ -1,6 +1,6 @@
 use kconfig_lsp::analysis::WorldIndex;
 use kconfig_lsp::ast::*;
-use kconfig_lsp::lexer::Lexer;
+use kconfig_lsp::lexer::{Lexer, TypeKind};
 use kconfig_lsp::parser;
 use std::default;
 use std::path::Path;
@@ -119,8 +119,8 @@ fn lexer_tokenizes_all_keywords() {
     assert!(kinds.contains(&&Help));
     assert!(kinds.contains(&&Modules));
     assert!(kinds.contains(&&Transitional));
-    assert!(kinds.contains(&&DefBool));
-    assert!(kinds.contains(&&DefTristate));
+    assert!(kinds.contains(&&DefType(TypeKind::Bool)));
+    assert!(kinds.contains(&&DefType(TypeKind::Tristate)));
     assert!(kinds.contains(&&Range));
 }
 

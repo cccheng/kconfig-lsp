@@ -1,5 +1,26 @@
 use crate::{ast::Span, settings::Settings};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TypeKind {
+    Bool,
+    Tristate,
+    String,
+    Hex,
+    Int,
+}
+
+impl TypeKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TypeKind::Bool => "bool",
+            TypeKind::Tristate => "tristate",
+            TypeKind::String => "string",
+            TypeKind::Hex => "hex",
+            TypeKind::Int => "int",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenKind {
     // Top-level keywords
@@ -26,8 +47,7 @@ pub enum TokenKind {
     // Attribute keywords
     Prompt,
     Default,
-    DefBool,
-    DefTristate,
+    DefType(TypeKind),
     Depends,
     On,
     Select,
@@ -335,8 +355,8 @@ impl<'a> Lexer<'a> {
             "int" => TokenKind::Int,
             "prompt" => TokenKind::Prompt,
             "default" => TokenKind::Default,
-            "def_bool" => TokenKind::DefBool,
-            "def_tristate" => TokenKind::DefTristate,
+            "def_bool" => TokenKind::DefType(TypeKind::Bool),
+            "def_tristate" => TokenKind::DefType(TypeKind::Tristate),
             "depends" => TokenKind::Depends,
             "on" => TokenKind::On,
             "select" => TokenKind::Select,
