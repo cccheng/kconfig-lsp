@@ -1,4 +1,4 @@
-use kconfig_lsp::analysis::WorldIndex;
+use kconfig_lsp::analysis::{RefKind, WorldIndex};
 use kconfig_lsp::ast::*;
 use kconfig_lsp::lexer::{Lexer, TypeKind};
 use kconfig_lsp::parser;
@@ -110,33 +110,111 @@ fn analysis_finds_all_symbols() {
     );
 }
 
-// An illegal attribute must be reported precisely, not fall through as an opaque
-// top-level error.
+// Every attribute keyword that `config` accepts, except `default`, must be
+// rejected inside `configdefault` with a precise diagnostic (not fall through as
+// an opaque top-level error). Enumerated explicitly so a keyword that stops being
+// rejected here shows up as a failure.
 #[test]
-fn configdefault_rejects_non_default_attributes() {
-    let cases = [
-        ("depends on", "configdefault FOO\n\tdefault y\n\tdepends on BAR\n"),
-        ("bool type", "configdefault FOO\n\tbool \"x\"\n\tdefault y\n"),
-        ("select", "configdefault FOO\n\tselect BAR\n"),
+fn configdefault_rejects_every_non_default_attribute() {
+    let keywords = [
+        "bool",
+        "tristate",
+        "string",
+        "hex",
+        "int",
+        "prompt",
+        "def_bool",
+        "def_tristate",
+        "depends",
+        "select",
+        "imply",
+        "visible",
+        "range",
+        "help",
+        "modules",
+        "transitional",
+        "optional",
     ];
 
-    for (label, src) in cases {
-        let tokens = Lexer::new(src, &settings()).tokenize();
-        let result = parser::parse(src, tokens);
-        let errors: Vec<_> = result
-            .diagnostics
-            .iter()
-            .filter(|d| d.severity == DiagSeverity::Error)
-            .collect();
-
+    for kw in keywords {
+        let src = format!("configdefault FOO\n\t{kw}\n");
+        let tokens = Lexer::new(&src, &settings()).tokenize();
+        let result = parser::parse(&src, tokens);
         assert!(
-            errors
-                .iter()
-                .any(|d| d.message.contains("configdefault can only contain")),
-            "[{label}] expected a 'configdefault can only contain default' diagnostic, got: {:?}",
-            errors.iter().map(|d| &d.message).collect::<Vec<_>>()
+            result.diagnostics.iter().any(|d| d.severity == DiagSeverity::Error
+                && d.message.contains("configdefault can only contain")),
+            "[{kw}] expected a 'configdefault can only contain default' diagnostic, got: {:?}",
+            result.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
         );
     }
+}
+
+// Zephyr docs allow wrapping configdefault in an `if` block:
+//   if BAR / configdefault FOO / default y / endif
+#[test]
+fn configdefault_inside_if_block() {
+    let src = "\
+if BAR
+configdefault FOO
+    default y
+endif
+
+config AFTER
+    bool \"after\"
+";
+    let tokens = Lexer::new(src, &settings()).tokenize();
+    let result = parser::parse(src, tokens);
+    let errors: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.severity == DiagSeverity::Error)
+        .collect();
+    assert!(errors.is_empty(), "unexpected errors: {:?}", errors);
+
+    // ConfigDefault(FOO) is nested inside the If(BAR) block.
+    let if_entry = result
+        .file
+        .entries
+        .iter()
+        .find_map(|e| match e {
+            Entry::If(i) => Some(i),
+            _ => None,
+        })
+        .expect("if block should be parsed");
+    assert!(
+        if_entry
+            .entries
+            .iter()
+            .any(|e| matches!(e, Entry::ConfigDefault(c) if c.name == "FOO")),
+        "configdefault FOO should be nested inside the if block"
+    );
+    assert_eq!(sym(&if_entry.condition), "BAR", "the if condition should be BAR");
+
+    // Analysis: the entry after `endif` still parses, FOO is a reference
+    // (configdefault augments a symbol) rather than a new definition, and the
+    // outer `if` condition BAR is recorded as a condition reference.
+    let mut index = WorldIndex::new();
+    index.settings = settings();
+    index.analyze_file(Path::new("Kconfig"), src);
+    assert!(
+        index
+            .get_references("BAR")
+            .iter()
+            .any(|r| r.kind == RefKind::IfCondition),
+        "BAR should be recorded as an if-condition reference"
+    );
+    assert!(
+        !index.get_definitions("AFTER").is_empty(),
+        "config AFTER after endif should be parsed"
+    );
+    assert!(
+        index.get_definitions("FOO").is_empty(),
+        "configdefault must not define FOO"
+    );
+    assert!(
+        !index.get_references("FOO").is_empty(),
+        "configdefault should reference FOO"
+    );
 }
 
 // `help` greedily consumes indented lines; an illegal one must not eat the entry
