@@ -194,7 +194,15 @@ impl<'a> Parser<'a> {
                     self.expect_newline();
                     attrs.push(Attribute::Optional(span));
                 }
-                _ => break,
+                other => {
+                    debug_assert!(
+                        !other.is_config_attribute(),
+                        "attribute keyword {other:?} has no parse arm here; keep \
+                         parse_config_attributes in sync with \
+                         TokenKind::is_config_attribute"
+                    );
+                    break;
+                }
             }
         }
         attrs
@@ -229,26 +237,11 @@ impl<'a> Parser<'a> {
             match self.peek() {
                 TokenKind::Default => attrs.push(self.parse_default_attr()),
 
-                // Illegal here (only `default` is allowed). Report and stop, so
-                // top-level recovery handles the rest: the lexer discards
-                // indentation, so continuing would re-parse an illegal `help`'s
-                // indented body as attributes.
-                TokenKind::Bool
-                | TokenKind::Tristate
-                | TokenKind::StringType
-                | TokenKind::Hex
-                | TokenKind::Int
-                | TokenKind::Prompt
-                | TokenKind::DefType(_)
-                | TokenKind::Depends
-                | TokenKind::Select
-                | TokenKind::Imply
-                | TokenKind::Visible
-                | TokenKind::Range
-                | TokenKind::Help
-                | TokenKind::Modules
-                | TokenKind::Transitional
-                | TokenKind::Optional => {
+                // Any other attribute keyword is illegal here (only `default` is
+                // allowed). Report and stop, so top-level recovery handles the
+                // rest: the lexer discards indentation, so continuing would
+                // re-parse an illegal `help`'s indented body as attributes.
+                k if k.is_config_attribute() => {
                     let span = self.current_span();
                     self.diag(
                         span,

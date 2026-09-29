@@ -87,6 +87,40 @@ pub enum TokenKind {
     Eof,
 }
 
+impl TokenKind {
+    /// Whether this token is an attribute keyword that may appear in a
+    /// `config`/`menuconfig` body.
+    ///
+    /// Centrally-maintained attribute classification. It must be kept in sync
+    /// with `parse_config_attributes` (which dispatches these) by hand: adding a
+    /// keyword there means adding it here too. `parse_configdefault_attributes`
+    /// then rejects every member except `Default`. The `debug_assert` in
+    /// `parse_config_attributes` only catches a keyword listed here without a
+    /// parse arm, not the reverse (an arm added but not classified here).
+    pub fn is_config_attribute(&self) -> bool {
+        matches!(
+            self,
+            TokenKind::Bool
+                | TokenKind::Tristate
+                | TokenKind::StringType
+                | TokenKind::Hex
+                | TokenKind::Int
+                | TokenKind::Prompt
+                | TokenKind::Default
+                | TokenKind::DefType(_)
+                | TokenKind::Depends
+                | TokenKind::Select
+                | TokenKind::Imply
+                | TokenKind::Visible
+                | TokenKind::Range
+                | TokenKind::Help
+                | TokenKind::Modules
+                | TokenKind::Transitional
+                | TokenKind::Optional
+        )
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Token {
     pub kind: TokenKind,
@@ -379,4 +413,24 @@ fn is_ident_start(b: u8) -> bool {
 
 fn is_ident_cont(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_' || b == b'-'
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_config_attribute_covers_attributes_not_entries() {
+        // Attribute keywords.
+        assert!(TokenKind::Default.is_config_attribute());
+        assert!(TokenKind::Depends.is_config_attribute());
+        assert!(TokenKind::DefType(TypeKind::Int).is_config_attribute());
+        assert!(TokenKind::Help.is_config_attribute());
+        // Entry keywords and structural tokens are not attributes.
+        assert!(!TokenKind::Config.is_config_attribute());
+        assert!(!TokenKind::MenuConfig.is_config_attribute());
+        assert!(!TokenKind::If.is_config_attribute());
+        assert!(!TokenKind::Eof.is_config_attribute());
+        assert!(!TokenKind::Ident("x".into()).is_config_attribute());
+    }
 }
