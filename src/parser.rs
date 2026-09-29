@@ -207,12 +207,8 @@ impl<'a> Parser<'a> {
         let (name, name_span) = self.expect_ident();
         self.expect_newline();
 
+        // `configdefault` (Zephyr extension) may only carry `default`.
         let attributes = self.parse_configdefault_attributes();
-
-        attributes.iter().for_each(|attr| match attr {
-            Attribute::Default(_) => {}
-            other => self.diag(attr_span(other), "expected default", DiagSeverity::Error),
-        });
 
         let span = start_span.merge(attributes.last().map(attr_span).unwrap_or(name_span));
 
@@ -232,10 +228,40 @@ impl<'a> Parser<'a> {
             self.skip_newlines();
             match self.peek() {
                 TokenKind::Default => attrs.push(self.parse_default_attr()),
+
+                // Illegal here (only `default` is allowed). Report and stop, so
+                // top-level recovery handles the rest: the lexer discards
+                // indentation, so continuing would re-parse an illegal `help`'s
+                // indented body as attributes.
+                TokenKind::Bool
+                | TokenKind::Tristate
+                | TokenKind::StringType
+                | TokenKind::Hex
+                | TokenKind::Int
+                | TokenKind::Prompt
+                | TokenKind::DefType(_)
+                | TokenKind::Depends
+                | TokenKind::Select
+                | TokenKind::Imply
+                | TokenKind::Visible
+                | TokenKind::Range
+                | TokenKind::Help
+                | TokenKind::Modules
+                | TokenKind::Transitional
+                | TokenKind::Optional => {
+                    let span = self.current_span();
+                    self.diag(
+                        span,
+                        "configdefault can only contain `default`",
+                        DiagSeverity::Error,
+                    );
+                    self.skip_to_eol();
+                    break;
+                }
+
                 _ => break,
             }
         }
-
         attrs
     }
 
