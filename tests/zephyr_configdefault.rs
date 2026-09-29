@@ -1,6 +1,6 @@
 use kconfig_lsp::analysis::{RefKind, WorldIndex};
 use kconfig_lsp::ast::*;
-use kconfig_lsp::lexer::{Lexer, TypeKind};
+use kconfig_lsp::lexer::{Lexer, TokenKind, TypeKind};
 use kconfig_lsp::parser;
 use kconfig_lsp::settings::Settings;
 use std::path::Path;
@@ -341,5 +341,50 @@ config BAR
     assert!(
         names.contains(&"BAR".to_string()),
         "config BAR after configdefault should be parsed as its own entry, got {names:?}"
+    );
+}
+
+// With zephyr_extensions disabled (the default), `configdefault` is not a
+// keyword. This keeps the extension opt-in so plain Linux/other Kconfig files are
+// unaffected. Guards against a regression that makes the keyword unconditional.
+#[test]
+fn configdefault_not_a_keyword_when_extension_disabled() {
+    let src = "configdefault FOO\n\tdefault y\n";
+    let tokens = Lexer::new(src, &Settings::default()).tokenize();
+
+    assert!(
+        !tokens.iter().any(|t| t.kind == TokenKind::ConfigDefault),
+        "configdefault must not tokenize as a keyword when the extension is off"
+    );
+    assert!(
+        tokens
+            .iter()
+            .any(|t| matches!(&t.kind, TokenKind::Ident(s) if s == "configdefault")),
+        "configdefault should be a plain identifier when the extension is off"
+    );
+}
+
+// With the extension disabled a configdefault block is not valid syntax: it is
+// rejected (error diagnostic) and yields no ConfigDefault entry.
+#[test]
+fn configdefault_rejected_when_extension_disabled() {
+    let src = "configdefault FOO\n\tdefault y\n";
+    let tokens = Lexer::new(src, &Settings::default()).tokenize();
+    let result = parser::parse(src, tokens);
+
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|d| d.severity == DiagSeverity::Error),
+        "configdefault should be rejected when zephyr_extensions is off"
+    );
+    assert!(
+        !result
+            .file
+            .entries
+            .iter()
+            .any(|e| matches!(e, Entry::ConfigDefault(_))),
+        "no ConfigDefault entry should be produced when the extension is off"
     );
 }
