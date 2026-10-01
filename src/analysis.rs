@@ -45,6 +45,15 @@ pub struct SymbolRef {
     pub file: PathBuf,
 }
 
+/// A `configdefault` block, kept so hover can show the defaults it adds.
+#[derive(Debug, Clone)]
+pub struct ConfigDefaultInfo {
+    pub name: String,
+    /// Span of each `default` line in the block.
+    pub defaults: Vec<Span>,
+    pub file: PathBuf,
+}
+
 #[derive(Debug, Clone)]
 pub struct FileAnalysis {
     pub file: KconfigFile,
@@ -57,6 +66,7 @@ pub struct FileAnalysis {
 pub struct WorldIndex {
     pub definitions: HashMap<String, Vec<SymbolDef>>,
     pub references: HashMap<String, Vec<SymbolRef>>,
+    pub configdefaults: HashMap<String, Vec<ConfigDefaultInfo>>,
     pub all_symbols: Vec<String>,
     pub files: HashMap<PathBuf, FileAnalysis>,
     pub settings: Settings,
@@ -75,8 +85,15 @@ impl WorldIndex {
         let file_path = path.to_path_buf();
         let mut defs = Vec::new();
         let mut refs = Vec::new();
+        let mut configdefaults = Vec::new();
 
-        collect_entries(&result.file.entries, &file_path, &mut defs, &mut refs);
+        collect_entries(
+            &result.file.entries,
+            &file_path,
+            &mut defs,
+            &mut refs,
+            &mut configdefaults,
+        );
 
         for d in &defs {
             self.definitions
@@ -92,6 +109,12 @@ impl WorldIndex {
                 .entry(r.name.clone())
                 .or_default()
                 .push(r.clone());
+        }
+        for info in configdefaults {
+            self.configdefaults
+                .entry(info.name.clone())
+                .or_default()
+                .push(info);
         }
 
         self.files.insert(
@@ -116,6 +139,10 @@ impl WorldIndex {
             refs.retain(|r| r.file != path);
             !refs.is_empty()
         });
+        self.configdefaults.retain(|_, infos| {
+            infos.retain(|info| info.file != path);
+            !infos.is_empty()
+        });
         self.all_symbols = self.definitions.keys().cloned().collect();
     }
 
@@ -137,6 +164,13 @@ impl WorldIndex {
             .map(|v| v.as_slice())
             .unwrap_or(&[])
     }
+
+    pub fn get_configdefaults(&self, name: &str) -> &[ConfigDefaultInfo] {
+        self.configdefaults
+            .get(name)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
+    }
 }
 
 fn collect_entries(
@@ -144,6 +178,7 @@ fn collect_entries(
     file: &Path,
     defs: &mut Vec<SymbolDef>,
     refs: &mut Vec<SymbolRef>,
+    configdefaults: &mut Vec<ConfigDefaultInfo>,
 ) {
     for entry in entries {
         match entry {
@@ -190,6 +225,18 @@ fn collect_entries(
                 });
             }
             Entry::ConfigDefault(c) => {
+                configdefaults.push(ConfigDefaultInfo {
+                    name: c.name.clone(),
+                    defaults: c
+                        .attributes
+                        .iter()
+                        .filter_map(|attr| match attr {
+                            Attribute::Default(d) => Some(d.span),
+                            _ => None,
+                        })
+                        .collect(),
+                    file: file.to_path_buf(),
+                });
                 // configdefault is in fact a reference
                 refs.push(SymbolRef {
                     name: c.name.clone(),
@@ -206,7 +253,7 @@ fn collect_entries(
                 for attr in &ch.attributes {
                     collect_attr_refs(attr, file, refs);
                 }
-                collect_entries(&ch.entries, file, defs, refs);
+                collect_entries(&ch.entries, file, defs, refs, configdefaults);
             }
             Entry::Comment(cm) => {
                 for attr in &cm.attributes {
@@ -217,11 +264,11 @@ fn collect_entries(
                 for attr in &m.attributes {
                     collect_attr_refs(attr, file, refs);
                 }
-                collect_entries(&m.entries, file, defs, refs);
+                collect_entries(&m.entries, file, defs, refs, configdefaults);
             }
             Entry::If(i) => {
                 collect_expr_refs(&i.condition, RefKind::IfCondition, file, refs);
-                collect_entries(&i.entries, file, defs, refs);
+                collect_entries(&i.entries, file, defs, refs, configdefaults);
             }
             Entry::Source(_) | Entry::MainMenu(_) => {}
         }

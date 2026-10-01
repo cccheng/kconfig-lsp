@@ -20,22 +20,40 @@ pub fn hover(index: &WorldIndex, path: &Path, pos: Position) -> Option<Hover> {
     }
 
     let defs = index.get_definitions(&word);
-    if !defs.is_empty() {
-        let mut parts: Vec<String> = Vec::new();
-        for d in defs {
-            let mut section = format!("**{}** ({})", d.name, def_kind_label(d.kind));
-            if let Some(tk) = d.type_kind {
-                section.push_str(&format!(" `{}`", tk.as_str()));
-            }
-            if let Some(prompt) = &d.prompt {
-                section.push_str(&format!("\n\n*\"{}\"*", prompt));
-            }
-            section.push_str(&format!("\n\nDefined in `{}`", d.file.display()));
-            if let Some(help) = &d.help {
-                section.push_str(&format!("\n\n---\n\n{}", help));
-            }
-            parts.push(section);
+    let mut parts: Vec<String> = Vec::new();
+    for d in defs {
+        let mut section = format!("**{}** ({})", d.name, def_kind_label(d.kind));
+        if let Some(tk) = d.type_kind {
+            section.push_str(&format!(" `{}`", tk.as_str()));
         }
+        if let Some(prompt) = &d.prompt {
+            section.push_str(&format!("\n\n*\"{}\"*", prompt));
+        }
+        section.push_str(&format!("\n\nDefined in `{}`", d.file.display()));
+        if let Some(help) = &d.help {
+            section.push_str(&format!("\n\n---\n\n{}", help));
+        }
+        parts.push(section);
+    }
+    for info in index.get_configdefaults(&word) {
+        let Some(source) = index.files.get(&info.file).map(|fa| &fa.source) else {
+            continue;
+        };
+        let defaults: Vec<&str> = info
+            .defaults
+            .iter()
+            .filter_map(|span| source.get(span.start..span.end))
+            .collect();
+        if defaults.is_empty() {
+            continue;
+        }
+        parts.push(format!(
+            "Extra defaults from `configdefault` in `{}`\n\n```kconfig\n{}\n```",
+            info.file.display(),
+            defaults.join("\n")
+        ));
+    }
+    if !parts.is_empty() {
         return Some(Hover {
             contents: HoverContents::Markup(MarkupContent {
                 kind: MarkupKind::Markdown,

@@ -1,11 +1,12 @@
 use kconfig_lsp::analysis::{RefKind, WorldIndex};
 use kconfig_lsp::ast::*;
 use kconfig_lsp::completion;
+use kconfig_lsp::hover;
 use kconfig_lsp::lexer::{Lexer, TokenKind, TypeKind};
 use kconfig_lsp::parser;
 use kconfig_lsp::settings::Settings;
 use std::path::Path;
-use tower_lsp::lsp_types::{CompletionItemKind, CompletionResponse, Position};
+use tower_lsp::lsp_types::{CompletionItemKind, CompletionResponse, HoverContents, Position};
 
 const SAMPLE_KCONFIG: &str = r#"
 config TEST_CONFIG
@@ -468,4 +469,64 @@ fn configdefault_completes_only_when_extension_enabled() {
         ["configdefault"]
     );
     assert!(keyword_completions(Settings::default(), "configd").is_empty());
+}
+
+const FOO_WITH_CONFIGDEFAULT: &str =
+    "config FOO\n\tbool \"foo\"\n\nconfigdefault FOO\n\tdefault y if BAR\n";
+
+fn index_with(settings: Settings, src: &str) -> WorldIndex {
+    let mut index = WorldIndex::new();
+    index.settings = settings;
+    index.analyze_file(Path::new("test/Kconfig"), src);
+    index
+}
+
+fn hover_text(index: &WorldIndex, pos: Position) -> String {
+    let hover = hover::hover(index, Path::new("test/Kconfig"), pos).expect("no hover");
+    let HoverContents::Markup(markup) = hover.contents else {
+        panic!("expected markup hover");
+    };
+    markup.value
+}
+
+#[test]
+fn hover_includes_configdefault_defaults_with_definition() {
+    let index = index_with(settings(), FOO_WITH_CONFIGDEFAULT);
+
+    let text = hover_text(&index, Position::new(0, 7));
+    assert!(text.contains("**FOO** (config) `bool`"));
+    assert!(text.contains("Defined in `test/Kconfig`"));
+    assert!(text.contains(
+        "\n\n---\n\nExtra defaults from `configdefault` in `test/Kconfig`\n\n```kconfig\ndefault y if BAR\n```"
+    ));
+}
+
+#[test]
+fn hover_shows_configdefault_without_definition() {
+    let index = index_with(
+        settings(),
+        "configdefault FOO\n\tdefault y if BAR\n\tdefault n\n",
+    );
+    assert!(index.get_definitions("FOO").is_empty());
+
+    assert_eq!(
+        hover_text(&index, Position::new(0, 14)),
+        "Extra defaults from `configdefault` in `test/Kconfig`\n\n```kconfig\ndefault y if BAR\ndefault n\n```"
+    );
+}
+
+#[test]
+fn reanalyze_removes_configdefault_info_and_hover() {
+    let mut index = index_with(settings(), FOO_WITH_CONFIGDEFAULT);
+    assert_eq!(index.get_configdefaults("FOO").len(), 1);
+
+    index.reanalyze_file(Path::new("test/Kconfig"), "config FOO\n\tbool \"foo\"\n");
+    assert!(index.get_configdefaults("FOO").is_empty());
+    assert!(!hover_text(&index, Position::new(0, 7)).contains("configdefault"));
+}
+
+#[test]
+fn configdefault_info_is_empty_when_extension_disabled() {
+    let index = index_with(Settings::default(), FOO_WITH_CONFIGDEFAULT);
+    assert!(index.configdefaults.is_empty());
 }
