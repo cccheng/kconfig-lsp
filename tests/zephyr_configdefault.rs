@@ -103,10 +103,18 @@ fn analysis_finds_all_symbols() {
         "TEST_CONDITION should be referenced by configdefault"
     );
 
+    // The only reference to TEST_CONFIG comes from configdefault and must cover
+    // just the symbol name, not the whole block.
     let test_refs = index.get_references("TEST_CONFIG");
-    assert!(
-        !test_refs.is_empty(),
-        "TEST_CONFIG should be referenced by configdefault"
+    assert_eq!(
+        test_refs.len(),
+        1,
+        "TEST_CONFIG should be referenced once, by configdefault: {test_refs:?}"
+    );
+    assert_eq!(test_refs[0].kind, RefKind::Default);
+    assert_eq!(
+        &SAMPLE_KCONFIG[test_refs[0].span.start..test_refs[0].span.end],
+        "TEST_CONFIG"
     );
 }
 
