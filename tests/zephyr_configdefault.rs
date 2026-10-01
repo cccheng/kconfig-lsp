@@ -141,10 +141,17 @@ fn configdefault_rejects_every_non_default_attribute() {
         let tokens = Lexer::new(&src, &settings()).tokenize();
         let result = parser::parse(&src, tokens);
         assert!(
-            result.diagnostics.iter().any(|d| d.severity == DiagSeverity::Error
-                && d.message.contains("configdefault can only contain")),
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.severity == DiagSeverity::Error
+                    && d.message.contains("configdefault can only contain")),
             "[{kw}] expected a 'configdefault can only contain default' diagnostic, got: {:?}",
-            result.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+            result
+                .diagnostics
+                .iter()
+                .map(|d| &d.message)
+                .collect::<Vec<_>>()
         );
     }
 }
@@ -188,7 +195,11 @@ config AFTER
             .any(|e| matches!(e, Entry::ConfigDefault(c) if c.name == "FOO")),
         "configdefault FOO should be nested inside the if block"
     );
-    assert_eq!(sym(&if_entry.condition), "BAR", "the if condition should be BAR");
+    assert_eq!(
+        sym(&if_entry.condition),
+        "BAR",
+        "the if condition should be BAR"
+    );
 
     // Analysis: the entry after `endif` still parses, FOO is a reference
     // (configdefault augments a symbol) rather than a new definition, and the
@@ -324,7 +335,10 @@ config BAR
         .collect();
     assert_eq!(defaults.len(), 2, "expected two defaults");
     assert_eq!(sym(&defaults[0].value), "y");
-    assert_eq!(defaults[0].condition.as_ref().map(sym), Some("COND".to_string()));
+    assert_eq!(
+        defaults[0].condition.as_ref().map(sym),
+        Some("COND".to_string())
+    );
     assert_eq!(sym(&defaults[1].value), "n");
     assert!(defaults[1].condition.is_none());
 
