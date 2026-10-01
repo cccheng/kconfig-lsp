@@ -210,6 +210,7 @@ impl<'a> Parser<'a> {
 
     fn parse_configdefault(&mut self) -> Entry {
         let start_span = self.current_span();
+        let diags_before = self.diagnostics.len();
         self.pos += 1; // skip `configdefault`
 
         let (name, name_span) = self.expect_ident();
@@ -217,6 +218,14 @@ impl<'a> Parser<'a> {
 
         // `configdefault` (Zephyr extension) may only carry `default`.
         let attributes = self.parse_configdefault_attributes();
+        // Skip the warning if the block was already reported as malformed.
+        if attributes.is_empty() && self.diagnostics.len() == diags_before {
+            self.diag(
+                name_span,
+                "configdefault without a `default` has no effect",
+                DiagSeverity::Warning,
+            );
+        }
 
         let span = start_span.merge(attributes.last().map(attr_span).unwrap_or(name_span));
 

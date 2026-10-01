@@ -368,6 +368,38 @@ config BAR
     );
 }
 
+fn diagnostics(src: &str) -> Vec<(DiagSeverity, String)> {
+    let tokens = Lexer::new(src, &settings()).tokenize();
+    parser::parse(src, tokens)
+        .diagnostics
+        .into_iter()
+        .map(|d| (d.severity, d.message))
+        .collect()
+}
+
+#[test]
+fn configdefault_without_default_warns() {
+    let src = "configdefault FOO\n\nconfig BAR\n\tbool \"bar\"\n";
+    assert_eq!(
+        diagnostics(src),
+        [(
+            DiagSeverity::Warning,
+            "configdefault without a `default` has no effect".to_string()
+        )]
+    );
+}
+
+// An illegal attribute is already an error; don't pile a warning on top.
+#[test]
+fn configdefault_with_only_illegal_attr_does_not_also_warn() {
+    let src = "configdefault FOO\n\tbool \"foo\"\n";
+    let diags = diagnostics(src);
+    assert!(
+        !diags.iter().any(|(s, _)| *s == DiagSeverity::Warning),
+        "unexpected warning: {diags:?}"
+    );
+}
+
 // With zephyr_extensions disabled (the default), `configdefault` is not a
 // keyword. This keeps the extension opt-in so plain Linux/other Kconfig files are
 // unaffected. Guards against a regression that makes the keyword unconditional.
