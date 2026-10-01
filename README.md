@@ -70,9 +70,24 @@ kconfig-lsp
 
 ## Configuration
 
+Options are read from `initializationOptions` when the server starts, so
+changing them requires restarting the server. Unknown options and values of
+the wrong type are reported as a warning.
+
 | option | type | default value | description |
 |---|---|---|---|
-| `zephyr_extensions` | bool | false | support for extensions described in [Zephyr docs](https://docs.zephyrproject.org/latest/build/kconfig/extensions.html)
+| `zephyr_extensions` | bool | false | accept `configdefault` from the [Zephyr Kconfig extensions](https://docs.zephyrproject.org/latest/build/kconfig/extensions.html) |
+
+Neovim passes them through `init_options`:
+
+```lua
+vim.lsp.config.kconfig = {
+    root_markers = { '.git', 'Kconfig' },
+    cmd = { 'kconfig-lsp' },
+    filetypes = { 'kconfig' },
+    init_options = { zephyr_extensions = true },
+}
+```
 
 ## Building & Testing
 
