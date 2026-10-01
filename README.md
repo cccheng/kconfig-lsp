@@ -104,6 +104,12 @@ The test suite includes:
 - Help text indentation parsing
 - Real-world validation against the Linux kernel's `init/Kconfig`
 
+The kernel test needs a Linux source tree and is skipped by default:
+
+```sh
+KCONFIG_LINUX_DIR=/path/to/linux cargo test -- --ignored
+```
+
 ## License
 
 MIT

@@ -231,27 +231,21 @@ fn help_text_parsed_correctly() {
     assert!(!audit_help.starts_with("  "));
 }
 
+/// Run with `KCONFIG_LINUX_DIR=/path/to/linux cargo test -- --ignored`.
 #[test]
+#[ignore = "needs a Linux source tree in KCONFIG_LINUX_DIR"]
 fn parse_real_kernel_kconfig() {
-    let path = Path::new("/home/cccheng/Workspace/linux/init/Kconfig");
-    if !path.exists() {
-        eprintln!("skipping: init/Kconfig not found");
-        return;
-    }
-    let source = std::fs::read_to_string(path).unwrap();
+    let dir = std::env::var_os("KCONFIG_LINUX_DIR")
+        .expect("KCONFIG_LINUX_DIR should point to a Linux source tree");
+    let path = Path::new(&dir).join("init/Kconfig");
+    let source = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
     let tokens = Lexer::new(&source, &Settings::default()).tokenize();
     let result = parser::parse(&source, tokens);
-
     assert!(result.file.entries.len() > 10);
-    eprintln!(
-        "init/Kconfig: {} entries, {} diagnostics",
-        result.file.entries.len(),
-        result.diagnostics.len()
-    );
 
     let mut index = WorldIndex::new();
-    index.analyze_file(path, &source);
-    eprintln!("Symbols: {}", index.all_symbols.len());
+    index.analyze_file(&path, &source);
     assert!(index.all_symbols.len() > 20);
 }
 
