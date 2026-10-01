@@ -1,25 +1,7 @@
-use crate::{ast::Span, settings::Settings};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TypeKind {
-    Bool,
-    Tristate,
-    String,
-    Hex,
-    Int,
-}
-
-impl TypeKind {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            TypeKind::Bool => "bool",
-            TypeKind::Tristate => "tristate",
-            TypeKind::String => "string",
-            TypeKind::Hex => "hex",
-            TypeKind::Int => "int",
-        }
-    }
-}
+use crate::{
+    ast::{Span, TypeKind},
+    settings::Settings,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenKind {

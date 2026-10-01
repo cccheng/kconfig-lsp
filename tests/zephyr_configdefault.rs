@@ -2,7 +2,7 @@ use kconfig_lsp::analysis::{RefKind, WorldIndex};
 use kconfig_lsp::ast::*;
 use kconfig_lsp::completion;
 use kconfig_lsp::hover;
-use kconfig_lsp::lexer::{Lexer, TokenKind, TypeKind};
+use kconfig_lsp::lexer::{Lexer, TokenKind};
 use kconfig_lsp::parser;
 use kconfig_lsp::settings::Settings;
 use std::path::Path;

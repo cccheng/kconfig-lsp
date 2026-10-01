@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::lexer::{Token, TokenKind, TypeKind};
+use crate::lexer::{Token, TokenKind};
 
 pub struct ParseResult {
     pub file: KconfigFile,
