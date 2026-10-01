@@ -188,14 +188,16 @@ impl LanguageServer for Backend {
         let uri = params.text_document.uri;
         self.documents.remove(&uri);
 
-        if let Some(path) = Self::uri_to_path(&uri) {
-            let is_workspace_file = self.workspace_files.lock().unwrap().contains(&path);
-            if is_workspace_file {
-                if let Ok(source) = std::fs::read_to_string(&path) {
-                    let mut idx = self.index.lock().unwrap();
-                    idx.reanalyze_file(&path, &source);
-                }
-            }
+        let Some(path) = Self::uri_to_path(&uri) else {
+            return;
+        };
+        let is_workspace_file = self.workspace_files.lock().unwrap().contains(&path);
+        if !is_workspace_file {
+            return;
+        }
+        if let Ok(source) = std::fs::read_to_string(&path) {
+            let mut idx = self.index.lock().unwrap();
+            idx.reanalyze_file(&path, &source);
         }
     }
 

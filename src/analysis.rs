@@ -278,10 +278,8 @@ fn collect_attr_refs(attr: &Attribute, file: &Path, refs: &mut Vec<SymbolRef>) {
             }
         }
         Attribute::Type(t) => {
-            if let Some(p) = &t.prompt {
-                if let Some(cond) = &p.condition {
-                    collect_expr_refs(cond, RefKind::DependsOn, file, refs);
-                }
+            if let Some(cond) = t.prompt.as_ref().and_then(|p| p.condition.as_ref()) {
+                collect_expr_refs(cond, RefKind::DependsOn, file, refs);
             }
         }
         Attribute::Prompt(p) => {
