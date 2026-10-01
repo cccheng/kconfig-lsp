@@ -22,6 +22,8 @@ pub struct Backend {
     /// version instead of dropping the file from the index entirely.
     workspace_files: Mutex<HashSet<PathBuf>>,
     settings: Mutex<Settings>,
+    /// Warnings from `initializationOptions`, shown in `initialized`.
+    settings_warnings: Mutex<Vec<String>>,
 }
 
 impl Backend {
@@ -33,6 +35,7 @@ impl Backend {
             workspace_root: Mutex::new(None),
             workspace_files: Mutex::new(HashSet::new()),
             settings: Mutex::new(Default::default()),
+            settings_warnings: Mutex::new(Vec::new()),
         }
     }
 
@@ -75,7 +78,9 @@ impl LanguageServer for Backend {
         }
 
         if let Some(ops) = params.initialization_options {
-            *self.settings.lock().unwrap() = Settings::from_json(ops);
+            let (settings, warnings) = Settings::from_json(ops);
+            *self.settings.lock().unwrap() = settings;
+            *self.settings_warnings.lock().unwrap() = warnings;
         }
 
         Ok(InitializeResult {
@@ -129,6 +134,16 @@ impl LanguageServer for Backend {
                     }
                 }
             }
+        }
+
+        // Await only after the scan, or a didOpen could run in between and
+        // have its unsaved text overwritten by the on-disk copy.
+        let warnings = std::mem::take(&mut *self.settings_warnings.lock().unwrap());
+        for warning in warnings {
+            log::warn!("{warning}");
+            self.client
+                .show_message(MessageType::WARNING, format!("kconfig-lsp: {warning}"))
+                .await;
         }
 
         // Re-publish diagnostics for any already-open files so that symbols
