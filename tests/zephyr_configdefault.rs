@@ -58,9 +58,16 @@ fn parser_produces_correct_entries() {
     assert!(names.contains(&"TEST_CONFIG".to_string()));
     assert!(names.contains(&"TEST_CONDITION".to_string()));
 
-    for d in &result.diagnostics {
-        eprintln!("  diag: {:?} {}", d.severity, d.message);
-    }
+    let configdefaults: Vec<&str> = result
+        .file
+        .entries
+        .iter()
+        .filter_map(|e| match e {
+            Entry::ConfigDefault(c) => Some(c.name.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(configdefaults, ["TEST_CONFIG"]);
 
     let errors: Vec<_> = result
         .diagnostics
@@ -72,9 +79,6 @@ fn parser_produces_correct_entries() {
 
 #[test]
 fn analysis_finds_all_symbols() {
-    let tokens = Lexer::new(SAMPLE_KCONFIG, &settings()).tokenize();
-    let result = parser::parse(SAMPLE_KCONFIG, tokens);
-
     let mut index = WorldIndex::new();
     index.settings = settings();
     index.analyze_file(Path::new("test/Kconfig"), SAMPLE_KCONFIG);
@@ -88,14 +92,10 @@ fn analysis_finds_all_symbols() {
         );
     }
 
-    let audit_defs = index.get_definitions("TEST_CONFIG");
-    assert_eq!(audit_defs[0].type_kind, Some(TypeKind::Bool));
-    assert_eq!(audit_defs[0].prompt.as_deref(), Some("test config"));
-    assert!(audit_defs[0].help.is_some());
-
-    for d in &result.diagnostics {
-        eprintln!("  diag: {:?} {}", d.severity, d.message);
-    }
+    let defs = index.get_definitions("TEST_CONFIG");
+    assert_eq!(defs[0].type_kind, Some(TypeKind::Bool));
+    assert_eq!(defs[0].prompt.as_deref(), Some("test config"));
+    assert!(defs[0].help.is_some());
 
     let test_refs = index.get_references("TEST_CONDITION");
     assert!(
