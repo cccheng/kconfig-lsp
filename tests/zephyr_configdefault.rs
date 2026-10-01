@@ -1,9 +1,11 @@
 use kconfig_lsp::analysis::{RefKind, WorldIndex};
 use kconfig_lsp::ast::*;
+use kconfig_lsp::completion;
 use kconfig_lsp::lexer::{Lexer, TokenKind, TypeKind};
 use kconfig_lsp::parser;
 use kconfig_lsp::settings::Settings;
 use std::path::Path;
+use tower_lsp::lsp_types::{CompletionItemKind, CompletionResponse, Position};
 
 const SAMPLE_KCONFIG: &str = r#"
 config TEST_CONFIG
@@ -409,4 +411,29 @@ fn configdefault_rejected_when_extension_disabled() {
             .any(|e| matches!(e, Entry::ConfigDefault(_))),
         "no ConfigDefault entry should be produced when the extension is off"
     );
+}
+
+fn keyword_completions(settings: Settings, src: &str) -> Vec<String> {
+    let mut index = WorldIndex::new();
+    index.settings = settings;
+    let path = Path::new("test/Kconfig");
+    index.analyze_file(path, src);
+    let pos = Position::new(0, src.len() as u32);
+    match completion::complete(&index, path, pos) {
+        Some(CompletionResponse::Array(items)) => items
+            .into_iter()
+            .filter(|i| i.kind == Some(CompletionItemKind::KEYWORD))
+            .map(|i| i.label)
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+#[test]
+fn configdefault_completes_only_when_extension_enabled() {
+    assert_eq!(
+        keyword_completions(settings(), "configd"),
+        ["configdefault"]
+    );
+    assert!(keyword_completions(Settings::default(), "configd").is_empty());
 }

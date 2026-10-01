@@ -11,7 +11,12 @@ pub fn complete(index: &WorldIndex, path: &Path, pos: Position) -> Option<Comple
 
     let mut items: Vec<CompletionItem> = Vec::new();
 
-    for kw in KEYWORDS {
+    let zephyr_keywords: &[&str] = if index.settings.zephyr_extensions {
+        ZEPHYR_KEYWORDS
+    } else {
+        &[]
+    };
+    for kw in KEYWORDS.iter().chain(zephyr_keywords) {
         if kw.starts_with(&prefix) || prefix.is_empty() {
             items.push(CompletionItem {
                 label: kw.to_string(),
@@ -94,3 +99,6 @@ const KEYWORDS: &[&str] = &[
     "transitional",
     "optional",
 ];
+
+/// Keywords only recognized with `zephyr_extensions` enabled.
+const ZEPHYR_KEYWORDS: &[&str] = &["configdefault"];
