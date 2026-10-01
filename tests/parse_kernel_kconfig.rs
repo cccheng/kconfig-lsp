@@ -156,9 +156,6 @@ fn parser_produces_correct_entries() {
         .any(|e| matches!(e, Entry::MainMenu(_)));
     assert!(has_mainmenu);
 
-    for d in &result.diagnostics {
-        eprintln!("  diag: {:?} {}", d.severity, d.message);
-    }
     let errors: Vec<_> = result
         .diagnostics
         .iter()
@@ -169,10 +166,6 @@ fn parser_produces_correct_entries() {
 
 #[test]
 fn analysis_finds_all_symbols() {
-    let tokens = Lexer::new(SAMPLE_KCONFIG, &Settings::default()).tokenize();
-    let result = parser::parse(SAMPLE_KCONFIG, tokens);
-    let _ = result;
-
     let mut index = WorldIndex::new();
     index.analyze_file(Path::new("test/Kconfig"), SAMPLE_KCONFIG);
 
@@ -263,7 +256,7 @@ fn parse_real_kernel_kconfig() {
 }
 
 #[test]
-fn debug_help_consumption() {
+fn help_text_does_not_swallow_next_entry() {
     let src = "config AUDIT\n\tbool \"Auditing support\"\n\tdepends on NET\n\tdefault y\n\thelp\n\t  Enable auditing infrastructure that can be used with another\n\t  kernel subsystem, such as SELinux.\n\nmenuconfig MODULES\n\tbool \"Enable loadable module support\"\n\tmodules\n";
     let tokens = Lexer::new(src, &Settings::default()).tokenize();
     let result = parser::parse(src, tokens);
@@ -278,12 +271,11 @@ fn debug_help_consumption() {
         })
         .collect();
 
-    eprintln!("names: {:?}", names);
-    for d in &result.diagnostics {
-        eprintln!("  diag: {:?} {}", d.severity, d.message);
-    }
-
-    assert!(names.contains(&"AUDIT".to_string()), "AUDIT missing");
+    assert!(
+        names.contains(&"AUDIT".to_string()),
+        "AUDIT missing from {:?}",
+        names
+    );
     assert!(
         names.contains(&"MODULES".to_string()),
         "MODULES missing from {:?}",
