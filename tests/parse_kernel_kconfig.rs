@@ -2,7 +2,7 @@ use kconfig_lsp::analysis::WorldIndex;
 use kconfig_lsp::ast::*;
 use kconfig_lsp::lexer::{Lexer, TypeKind};
 use kconfig_lsp::parser;
-use std::default;
+use kconfig_lsp::settings::Settings;
 use std::path::Path;
 
 const SAMPLE_KCONFIG: &str = r#"
@@ -94,7 +94,7 @@ endmenu
 
 #[test]
 fn lexer_tokenizes_all_keywords() {
-    let tokens = Lexer::new(SAMPLE_KCONFIG, &default::Default::default()).tokenize();
+    let tokens = Lexer::new(SAMPLE_KCONFIG, &Settings::default()).tokenize();
     assert!(tokens.len() > 50);
 
     let kinds: Vec<_> = tokens.iter().map(|t| &t.kind).collect();
@@ -126,7 +126,7 @@ fn lexer_tokenizes_all_keywords() {
 
 #[test]
 fn parser_produces_correct_entries() {
-    let tokens = Lexer::new(SAMPLE_KCONFIG, &default::Default::default()).tokenize();
+    let tokens = Lexer::new(SAMPLE_KCONFIG, &Settings::default()).tokenize();
     let result = parser::parse(SAMPLE_KCONFIG, tokens);
 
     let names: Vec<String> = result
@@ -169,7 +169,7 @@ fn parser_produces_correct_entries() {
 
 #[test]
 fn analysis_finds_all_symbols() {
-    let tokens = Lexer::new(SAMPLE_KCONFIG, &default::Default::default()).tokenize();
+    let tokens = Lexer::new(SAMPLE_KCONFIG, &Settings::default()).tokenize();
     let result = parser::parse(SAMPLE_KCONFIG, tokens);
     let _ = result;
 
@@ -246,7 +246,7 @@ fn parse_real_kernel_kconfig() {
         return;
     }
     let source = std::fs::read_to_string(path).unwrap();
-    let tokens = Lexer::new(&source, &default::Default::default()).tokenize();
+    let tokens = Lexer::new(&source, &Settings::default()).tokenize();
     let result = parser::parse(&source, tokens);
 
     assert!(result.file.entries.len() > 10);
@@ -265,7 +265,7 @@ fn parse_real_kernel_kconfig() {
 #[test]
 fn debug_help_consumption() {
     let src = "config AUDIT\n\tbool \"Auditing support\"\n\tdepends on NET\n\tdefault y\n\thelp\n\t  Enable auditing infrastructure that can be used with another\n\t  kernel subsystem, such as SELinux.\n\nmenuconfig MODULES\n\tbool \"Enable loadable module support\"\n\tmodules\n";
-    let tokens = Lexer::new(src, &default::Default::default()).tokenize();
+    let tokens = Lexer::new(src, &Settings::default()).tokenize();
     let result = parser::parse(src, tokens);
 
     let names: Vec<String> = result
