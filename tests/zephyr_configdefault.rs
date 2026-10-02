@@ -136,6 +136,9 @@ fn configdefault_rejects_every_non_default_attribute() {
         "prompt",
         "def_bool",
         "def_tristate",
+        "def_int",
+        "def_hex",
+        "def_string",
         "depends",
         "select",
         "imply",
@@ -529,4 +532,41 @@ fn reanalyze_removes_configdefault_info_and_hover() {
 fn configdefault_info_is_empty_when_extension_disabled() {
     let index = index_with(Settings::default(), FOO_WITH_CONFIGDEFAULT);
     assert!(index.configdefaults.is_empty());
+}
+
+#[test]
+fn def_types_complete_only_when_extension_enabled() {
+    assert_eq!(
+        keyword_completions(settings(), "def_"),
+        [
+            "def_bool",
+            "def_tristate",
+            "def_int",
+            "def_hex",
+            "def_string"
+        ]
+    );
+    assert_eq!(
+        keyword_completions(Settings::default(), "def_"),
+        ["def_bool", "def_tristate"]
+    );
+}
+
+#[test]
+fn zephyr_keywords_have_hover_docs_only_when_extension_enabled() {
+    let cases = [
+        ("configdefault", "configdefault A\n\tdefault y\n", 0),
+        ("def_int", "config A\n\tdef_int 3\n", 1),
+        ("def_hex", "config A\n\tdef_hex 3\n", 1),
+        ("def_string", "config A\n\tdef_string 3\n", 1),
+    ];
+    for (kw, src, line) in cases {
+        let pos = Position::new(line, 2);
+
+        let on = index_with(settings(), src);
+        assert!(hover_text(&on, pos).starts_with(&format!("**{kw}**")));
+
+        let off = index_with(Settings::default(), src);
+        assert!(hover::hover(&off, Path::new("test/Kconfig"), pos).is_none());
+    }
 }

@@ -9,7 +9,14 @@ pub fn hover(index: &WorldIndex, path: &Path, pos: Position) -> Option<Hover> {
     let offset = fa.line_index.offset(pos.line, pos.character);
     let word = word_at_offset(&fa.source, offset)?;
 
-    if let Some(doc) = keyword_docs(&word) {
+    let doc = keyword_docs(&word).or_else(|| {
+        if index.settings.zephyr_extensions {
+            zephyr_keyword_docs(&word)
+        } else {
+            None
+        }
+    });
+    if let Some(doc) = doc {
         return Some(Hover {
             contents: HoverContents::Markup(MarkupContent {
                 kind: MarkupKind::Markdown,
@@ -96,6 +103,42 @@ fn def_kind_label(kind: crate::analysis::DefKind) -> &'static str {
         crate::analysis::DefKind::MenuConfig => "menuconfig",
         crate::analysis::DefKind::Choice => "choice",
     }
+}
+
+/// Docs for keywords only recognized with `zephyr_extensions` enabled.
+fn zephyr_keyword_docs(word: &str) -> Option<&'static str> {
+    Some(match word {
+        "configdefault" => {
+            "\
+**configdefault** `<symbol>`
+
+Adds `default` values to a symbol defined elsewhere (Zephyr). Only \
+`default` lines are allowed in the block."
+        }
+
+        "def_int" => {
+            "\
+**def_int** `<expr>` [`if` `<expr>`]
+
+Shorthand for an `int` type definition plus a default value (Zephyr)."
+        }
+
+        "def_hex" => {
+            "\
+**def_hex** `<expr>` [`if` `<expr>`]
+
+Shorthand for a `hex` type definition plus a default value (Zephyr)."
+        }
+
+        "def_string" => {
+            "\
+**def_string** `<expr>` [`if` `<expr>`]
+
+Shorthand for a `string` type definition plus a default value (Zephyr)."
+        }
+
+        _ => return None,
+    })
 }
 
 fn keyword_docs(word: &str) -> Option<&'static str> {
