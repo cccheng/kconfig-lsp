@@ -3,6 +3,7 @@ use std::path::Path;
 use tower_lsp::lsp_types::*;
 
 use crate::analysis::WorldIndex;
+use crate::lexer::{Lexer, TokenKind};
 
 pub fn complete(index: &WorldIndex, path: &Path, pos: Position) -> Option<CompletionResponse> {
     let fa = index.files.get(path)?;
@@ -26,9 +27,9 @@ pub fn complete(index: &WorldIndex, path: &Path, pos: Position) -> Option<Comple
         }
     }
 
+    let offer_symbols = !prefix.is_empty() || is_symbol_position(index, &fa.source, offset);
     for sym in &index.all_symbols {
-        if sym.starts_with(&prefix) || (prefix.is_empty() && is_symbol_position(&fa.source, offset))
-        {
+        if offer_symbols && sym.starts_with(&prefix) {
             items.push(CompletionItem {
                 label: sym.clone(),
                 kind: Some(CompletionItemKind::CONSTANT),
@@ -57,15 +58,47 @@ fn prefix_at_offset(source: &str, offset: usize) -> String {
     source[start..offset].to_string()
 }
 
-fn is_symbol_position(source: &str, offset: usize) -> bool {
+/// Whether a symbol can start at `offset`, judged by the last token before
+/// it on the same line.
+fn is_symbol_position(index: &WorldIndex, source: &str, offset: usize) -> bool {
     let line_start = source[..offset].rfind('\n').map_or(0, |p| p + 1);
-    let before = source[line_start..offset].trim_start();
+    let tokens = Lexer::new(&source[line_start..offset], &index.settings).tokenize();
+    let kinds: Vec<&TokenKind> = tokens
+        .iter()
+        .map(|t| &t.kind)
+        .filter(|k| !matches!(k, TokenKind::Newline | TokenKind::Eof))
+        .collect();
+    let (Some(first), Some(last)) = (kinds.first(), kinds.last()) else {
+        return false;
+    };
+    // Help text and other prose start with a plain word.
+    if matches!(
+        first,
+        TokenKind::Ident(_) | TokenKind::StringLit(_) | TokenKind::Macro(_)
+    ) {
+        return false;
+    }
     matches!(
-        before,
-        "depends on " | "select " | "imply " | "default " | "def_bool " | "def_tristate "
-    ) || before.starts_with("depends on ")
-        || before.starts_with("select ")
-        || before.starts_with("imply ")
+        last,
+        TokenKind::On
+            | TokenKind::Select
+            | TokenKind::Imply
+            | TokenKind::Default
+            | TokenKind::DefType(_)
+            | TokenKind::Range
+            | TokenKind::If
+            | TokenKind::ConfigDefault
+            | TokenKind::Not
+            | TokenKind::And
+            | TokenKind::Or
+            | TokenKind::OpenParen
+            | TokenKind::Eq
+            | TokenKind::NotEq
+            | TokenKind::Less
+            | TokenKind::Greater
+            | TokenKind::LessEq
+            | TokenKind::GreaterEq
+    )
 }
 
 const KEYWORDS: &[&str] = &[
