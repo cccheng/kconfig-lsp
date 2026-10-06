@@ -304,6 +304,14 @@ fn help_span_covers_the_whole_text() {
 }
 
 #[test]
+fn help_without_text_at_end_of_file() {
+    let src = "config A\n\tbool \"a\"\n\thelp";
+    let tokens = Lexer::new(src, &Settings::default()).tokenize();
+    let result = parser::parse(src, tokens);
+    assert_eq!(help_attr(&result.file, "A").text, "");
+}
+
+#[test]
 fn help_text_with_crlf_line_endings() {
     let body: String = (0..12)
         .map(|i| format!("\t  Line {i} depends on foo.\r\n"))

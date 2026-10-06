@@ -397,10 +397,11 @@ impl<'a> Parser<'a> {
 
         let src = self.source;
 
-        let token_offset = self.current_span().start;
-        let raw_start = src[..token_offset]
-            .rfind('\n')
-            .map_or(token_offset, |p| p + 1);
+        // The text starts after the newline that ends the `help` line.
+        let raw_start = self.tokens[..self.pos]
+            .last()
+            .filter(|t| t.kind == TokenKind::Newline)
+            .map_or(src.len(), |t| t.span.end);
         let remaining = &src[raw_start..];
 
         let mut consumed = 0usize;
