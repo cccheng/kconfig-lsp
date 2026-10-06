@@ -322,6 +322,14 @@ fn config_names(file: &KconfigFile) -> Vec<&str> {
 }
 
 #[test]
+fn help_skips_leading_blank_lines() {
+    let src = "config A\n\tbool \"a\"\n\thelp\n\n\t  Text.\n";
+    let tokens = Lexer::new(src, &Settings::default()).tokenize();
+    let result = parser::parse(src, tokens);
+    assert_eq!(help_attr(&result.file, "A").text, "Text.");
+}
+
+#[test]
 fn help_ends_at_an_unindented_line() {
     for src in [
         "config A\n\tbool \"a\"\n\thelp\nconfig B\n\tbool \"b\"\n",
@@ -333,6 +341,32 @@ fn help_ends_at_an_unindented_line() {
         assert_eq!(help_attr(&result.file, "A").text, "", "{src:?}");
         assert_eq!(config_names(&result.file), ["A", "B"], "{src:?}");
     }
+}
+
+#[test]
+fn help_indent_counts_tabs_as_eight_columns() {
+    // `\t  ` is 10 columns, so 12 spaces are 2 more and 4 spaces end the text.
+    let src =
+        "config A\n\tbool \"a\"\n\thelp\n\t  Line one.\n            Line two.\n    depends on B\n";
+    let tokens = Lexer::new(src, &Settings::default()).tokenize();
+    let result = parser::parse(src, tokens);
+    assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+    assert_eq!(help_attr(&result.file, "A").text, "Line one.\n  Line two.");
+    let has_depends_on = result.file.entries.iter().any(|e| match e {
+        Entry::Config(c) => c
+            .attributes
+            .iter()
+            .any(|a| matches!(a, Attribute::DependsOn(_))),
+        _ => false,
+    });
+    assert!(has_depends_on);
+
+    // A tab after spaces goes to the next tab stop, so `  \t  ` is 10 columns too.
+    let src = "config A\n\tbool \"a\"\n\thelp\n          Line one.\n  \t  Line two.\n";
+    let tokens = Lexer::new(src, &Settings::default()).tokenize();
+    let result = parser::parse(src, tokens);
+    assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+    assert_eq!(help_attr(&result.file, "A").text, "Line one.\nLine two.");
 }
 
 #[test]

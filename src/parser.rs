@@ -394,7 +394,7 @@ impl<'a> Parser<'a> {
     /// The text ends at the first non-blank line indented less than its
     /// first line. A first line without indent ends it at once.
     fn consume_help_text(&mut self) -> (String, Option<usize>) {
-        let mut lines: Vec<&str> = Vec::new();
+        let mut lines: Vec<String> = Vec::new();
         let mut base_indent: Option<usize> = None;
         let mut text_end = None;
 
@@ -410,18 +410,20 @@ impl<'a> Parser<'a> {
         let mut consumed = 0usize;
         for raw_line in remaining.split_inclusive('\n') {
             let line = raw_line.trim_end_matches(['\n', '\r']);
-            let trimmed = line.trim_start();
-            if trimmed.is_empty() {
-                lines.push("");
+            let text = line.trim_start_matches([' ', '\t']);
+            if text.is_empty() {
+                if base_indent.is_some() {
+                    lines.push(String::new());
+                }
                 consumed += raw_line.len();
                 continue;
             }
-            let indent = line.len() - trimmed.len();
+            let indent = indent_width(&line[..line.len() - text.len()]);
             let base = *base_indent.get_or_insert(indent);
             if indent == 0 || indent < base {
                 break;
             }
-            lines.push(line);
+            lines.push(format!("{}{text}", " ".repeat(indent - base)));
             text_end = Some(raw_start + consumed + line.len());
             consumed += raw_line.len();
         }
@@ -435,22 +437,7 @@ impl<'a> Parser<'a> {
             self.pos += 1;
         }
 
-        // Strip the base indent from each line.
-        let bi = base_indent.unwrap_or(0);
-        let text = lines
-            .iter()
-            .map(|l| {
-                if l.len() > bi {
-                    &l[bi..]
-                } else {
-                    l.trim_start()
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-            .trim_end()
-            .to_string();
-        (text, text_end)
+        (lines.join("\n").trim_end().to_string(), text_end)
     }
 
     // -----------------------------------------------------------------------
@@ -857,4 +844,10 @@ fn attr_span(a: &Attribute) -> Span {
         Attribute::Help(h) => h.span,
         Attribute::Modules(s) | Attribute::Transitional(s) | Attribute::Optional(s) => *s,
     }
+}
+
+/// Width of leading spaces and tabs, with tab stops every 8 columns.
+fn indent_width(ws: &str) -> usize {
+    ws.bytes()
+        .fold(0, |w, b| if b == b'\t' { (w & !7) + 8 } else { w + 1 })
 }
