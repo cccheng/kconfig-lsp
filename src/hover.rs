@@ -313,11 +313,12 @@ Shorthand for a `tristate` type definition plus a default value."
 
         "depends" => {
             "\
-**depends on** `<expr>`
+**depends on** `<expr>` [`if` `<expr>`]
 
 Defines a dependency for this menu entry. If multiple dependencies \
 are defined, they are connected with `&&`. Dependencies are applied \
-to all other options within this menu entry."
+to all other options within this menu entry. With `if`, the dependency \
+applies only when the condition is not `n`."
         }
 
         "select" => {

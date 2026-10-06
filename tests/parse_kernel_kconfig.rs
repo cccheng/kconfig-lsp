@@ -390,3 +390,29 @@ fn help_text_with_crlf_line_endings() {
             .any(|e| matches!(e, Entry::Config(c) if c.name == "B"))
     );
 }
+
+#[test]
+fn depends_on_with_if_condition() {
+    let src = "config A\n\tbool \"a\"\n\tdepends on (B && C) if D\n";
+    let tokens = Lexer::new(src, &Settings::default()).tokenize();
+    let result = parser::parse(src, tokens);
+    assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+    let Some(Entry::Config(a)) = result.file.entries.first() else {
+        panic!("expected config A");
+    };
+    let span = a
+        .attributes
+        .iter()
+        .find_map(|attr| match attr {
+            Attribute::DependsOn(d) => Some(d.span),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(&src[span.start..span.end], "depends on (B && C) if D");
+
+    let mut index = WorldIndex::new();
+    index.analyze_file(Path::new("test/Kconfig"), src);
+    for name in ["B", "C", "D"] {
+        assert_eq!(index.get_references(name).len(), 1, "{name}");
+    }
+}

@@ -324,9 +324,14 @@ impl<'a> Parser<'a> {
             self.pos += 1;
         }
         let expr = self.parse_expr();
-        let span = start.merge(expr.span());
+        let condition = self.try_parse_if_condition();
+        let span = start.merge(condition.as_ref().map(|e| e.span()).unwrap_or(expr.span()));
         self.expect_newline();
-        Attribute::DependsOn(DependsOnAttr { expr, span })
+        Attribute::DependsOn(DependsOnAttr {
+            expr,
+            condition,
+            span,
+        })
     }
 
     fn parse_select_imply(&mut self, is_select: bool) -> Attribute {

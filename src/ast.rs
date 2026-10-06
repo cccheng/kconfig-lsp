@@ -166,6 +166,7 @@ pub struct DefTypeAttr {
 #[derive(Debug, Clone)]
 pub struct DependsOnAttr {
     pub expr: Expr,
+    pub condition: Option<Expr>,
     pub span: Span,
 }
 

@@ -279,6 +279,9 @@ fn collect_attr_refs(attr: &Attribute, file: &Path, refs: &mut Vec<SymbolRef>) {
     match attr {
         Attribute::DependsOn(d) => {
             collect_expr_refs(&d.expr, RefKind::DependsOn, file, refs);
+            if let Some(cond) = &d.condition {
+                collect_expr_refs(cond, RefKind::DependsOn, file, refs);
+            }
         }
         Attribute::Select(s) => {
             refs.push(SymbolRef {
