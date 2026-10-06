@@ -3,6 +3,7 @@ pub mod ast;
 pub mod completion;
 pub mod definition;
 pub mod diagnostics;
+pub mod folding;
 pub mod hover;
 pub mod lexer;
 pub mod parser;

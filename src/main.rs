@@ -3,6 +3,7 @@ mod ast;
 mod completion;
 mod definition;
 mod diagnostics;
+mod folding;
 mod hover;
 mod lexer;
 mod parser;

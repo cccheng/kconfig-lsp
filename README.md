@@ -12,6 +12,7 @@ A language server for the Kconfig configuration language used in Linux, Zephyr, 
 | `textDocument/completion` | Complete keywords and known symbols |
 | `textDocument/documentSymbol` | Outline of menus, choices, `if` blocks and symbols |
 | `workspace/symbol` | Search `config` / `menuconfig` definitions in all indexed files |
+| `textDocument/foldingRange` | Fold menus, choices, `if` blocks and help text |
 | `textDocument/publishDiagnostics` | Parse errors and undefined symbol warnings |
 
 Full coverage of the Kconfig grammar defined in `Documentation/kbuild/kconfig-language.rst`:
