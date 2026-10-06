@@ -33,6 +33,34 @@ fn line_index_counts_utf16_units() {
     }
 }
 
+#[test]
+fn line_index_ends_lines_before_crlf() {
+    let text = "aÉ\r\nx\n";
+    let index = LineIndex::new(text);
+    for (offset, line_col) in [(3, (0, 2)), (4, (0, 2)), (5, (1, 0)), (7, (2, 0))] {
+        assert_eq!(index.line_col(text, offset), line_col, "{offset}");
+    }
+    for ((line, col), offset) in [((0, 99), 3), ((1, 0), 5), ((2, 0), 7), ((9, 0), 7)] {
+        assert_eq!(index.offset(text, line, col), offset, "{line}:{col}");
+    }
+
+    let empty = LineIndex::new("");
+    assert_eq!(empty.line_col("", 0), (0, 0));
+    assert_eq!(empty.offset("", 0, 5), 0);
+}
+
+#[test]
+fn diagnostic_at_crlf_ends_with_the_line_text() {
+    let path = std::env::current_dir().unwrap().join("test/Kconfig");
+    let mut index = WorldIndex::new();
+    index.analyze_file(&path, "config\r\n");
+    let starts: Vec<Position> = diagnostics::collect(&index, &path)
+        .into_iter()
+        .map(|d| d.range.start)
+        .collect();
+    assert_eq!(starts, [Position::new(0, 6)]);
+}
+
 const SRC: &str = "config FOO\n\tbool \"CAFÉ 😀\" if FOO\n\tdepends on \"é\" = F";
 
 fn index() -> (WorldIndex, PathBuf) {

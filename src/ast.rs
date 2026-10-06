@@ -39,14 +39,15 @@ impl LineIndex {
         Self { line_starts }
     }
 
-    /// Convert byte offset in `text` to 0-based (line, col).
+    /// Convert byte offset in `text` to 0-based (line, col). An offset in
+    /// the line ending gives the end of the line.
     pub fn line_col(&self, text: &str, offset: usize) -> (u32, u32) {
         let line = self
             .line_starts
             .partition_point(|&start| start <= offset)
             .saturating_sub(1);
         let start = self.line_starts[line];
-        let col: usize = text[start..]
+        let col: usize = line_text(text, start)
             .char_indices()
             .take_while(|&(i, _)| start + i < offset)
             .map(|(_, ch)| ch.len_utf16())
@@ -55,24 +56,33 @@ impl LineIndex {
     }
 
     /// Convert 0-based (line, col) to byte offset in `text`. A col past the
-    /// end of the line gives the end of the line.
+    /// end of the line gives the end of the line. A line past the end of
+    /// the text gives the start of the last line.
     pub fn offset(&self, text: &str, line: u32, col: u32) -> usize {
         let Some(&start) = self.line_starts.get(line as usize) else {
             return self.line_starts.last().copied().unwrap_or(0);
         };
+        let line = line_text(text, start);
         let mut units = 0;
-        for (i, ch) in text[start..].char_indices() {
-            if units >= col as usize || ch == '\n' {
+        for (i, ch) in line.char_indices() {
+            if units >= col as usize {
                 return start + i;
             }
             units += ch.len_utf16();
         }
-        text.len()
+        start + line.len()
     }
 
     pub fn line_count(&self) -> usize {
         self.line_starts.len()
     }
+}
+
+/// The line that starts at `start`, without its `\n` or `\r\n`.
+fn line_text(text: &str, start: usize) -> &str {
+    let rest = &text[start..];
+    let line = rest.find('\n').map_or(rest, |n| &rest[..n]);
+    line.strip_suffix('\r').unwrap_or(line)
 }
 
 // ---------------------------------------------------------------------------
