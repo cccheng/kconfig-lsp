@@ -45,10 +45,12 @@ pub struct SymbolRef {
     pub file: PathBuf,
 }
 
-/// A `configdefault` block, kept so hover can show the defaults it adds.
+/// A `configdefault` block, kept so hover can show the defaults it adds
+/// and goto can jump to it.
 #[derive(Debug, Clone)]
 pub struct ConfigDefaultInfo {
     pub name: String,
+    pub name_span: Span,
     /// Span of each `default` line in the block.
     pub defaults: Vec<Span>,
     pub file: PathBuf,
@@ -227,6 +229,7 @@ fn collect_entries(
             Entry::ConfigDefault(c) => {
                 configdefaults.push(ConfigDefaultInfo {
                     name: c.name.clone(),
+                    name_span: c.name_span,
                     defaults: c
                         .attributes
                         .iter()

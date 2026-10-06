@@ -13,18 +13,23 @@ pub fn goto_definition(
     let offset = fa.line_index.offset(pos.line, pos.character);
     let word = word_at_offset(&fa.source, offset)?;
 
-    let defs = index.get_definitions(&word);
-    if defs.is_empty() {
-        return None;
-    }
+    // `configdefault` blocks come after the definitions.
+    let defs = index
+        .get_definitions(&word)
+        .iter()
+        .map(|d| (&d.file, d.name_span));
+    let configdefaults = index
+        .get_configdefaults(&word)
+        .iter()
+        .map(|c| (&c.file, c.name_span));
 
     let locations: Vec<Location> = defs
-        .iter()
-        .filter_map(|d| {
-            let target_fa = index.files.get(&d.file)?;
-            let (line, col) = target_fa.line_index.line_col(d.name_span.start);
-            let (end_line, end_col) = target_fa.line_index.line_col(d.name_span.end);
-            let uri = Url::from_file_path(&d.file).ok()?;
+        .chain(configdefaults)
+        .filter_map(|(file, span)| {
+            let target_fa = index.files.get(file)?;
+            let (line, col) = target_fa.line_index.line_col(span.start);
+            let (end_line, end_col) = target_fa.line_index.line_col(span.end);
+            let uri = Url::from_file_path(file).ok()?;
             Some(Location {
                 uri,
                 range: Range {

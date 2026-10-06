@@ -1,12 +1,16 @@
 use kconfig_lsp::analysis::{RefKind, WorldIndex};
 use kconfig_lsp::ast::*;
 use kconfig_lsp::completion;
+use kconfig_lsp::definition;
 use kconfig_lsp::hover;
 use kconfig_lsp::lexer::{Lexer, TokenKind};
 use kconfig_lsp::parser;
 use kconfig_lsp::settings::Settings;
-use std::path::Path;
-use tower_lsp::lsp_types::{CompletionItemKind, CompletionResponse, HoverContents, Position};
+use std::path::{Path, PathBuf};
+use tower_lsp::lsp_types::{
+    CompletionItemKind, CompletionResponse, GotoDefinitionResponse, HoverContents, Location,
+    Position, Range, Url,
+};
 
 const SAMPLE_KCONFIG: &str = r#"
 config TEST_CONFIG
@@ -569,4 +573,59 @@ fn zephyr_keywords_have_hover_docs_only_when_extension_enabled() {
         let off = index_with(Settings::default(), src);
         assert!(hover::hover(&off, Path::new("test/Kconfig"), pos).is_none());
     }
+}
+
+/// Goto needs an absolute path to make a file URI.
+fn abs_path(name: &str) -> PathBuf {
+    std::env::current_dir().unwrap().join(name)
+}
+
+/// The location of `FOO` at `line`, `col` in `path`.
+fn foo_at(path: &Path, line: u32, col: u32) -> Location {
+    Location {
+        uri: Url::from_file_path(path).unwrap(),
+        range: Range::new(Position::new(line, col), Position::new(line, col + 3)),
+    }
+}
+
+#[test]
+fn goto_lists_configdefault_after_definition() {
+    let kconfig = abs_path("k/Kconfig");
+    let defaults = abs_path("k/Kconfig.defaults");
+    let mut index = WorldIndex::new();
+    index.settings = settings();
+    index.analyze_file(&defaults, "configdefault FOO\n\tdefault y\n");
+    index.analyze_file(
+        &kconfig,
+        "config FOO\n\tbool \"foo\"\n\nconfig BAR\n\tbool \"bar\"\n\tdepends on FOO\n",
+    );
+
+    let expected = Some(GotoDefinitionResponse::Array(vec![
+        foo_at(&kconfig, 0, 7),
+        foo_at(&defaults, 0, 14),
+    ]));
+    assert_eq!(
+        definition::goto_definition(&index, &kconfig, Position::new(5, 13)),
+        expected
+    );
+    assert_eq!(
+        definition::goto_definition(&index, &defaults, Position::new(0, 15)),
+        expected
+    );
+}
+
+#[test]
+fn goto_finds_configdefault_without_definition() {
+    let kconfig = abs_path("k/Kconfig");
+    let mut index = WorldIndex::new();
+    index.settings = settings();
+    index.analyze_file(
+        &kconfig,
+        "configdefault FOO\n\tdefault y\n\nconfig BAR\n\tbool \"bar\"\n\tdepends on FOO\n",
+    );
+
+    assert_eq!(
+        definition::goto_definition(&index, &kconfig, Position::new(5, 13)),
+        Some(GotoDefinitionResponse::Scalar(foo_at(&kconfig, 0, 14)))
+    );
 }
