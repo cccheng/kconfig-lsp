@@ -2,7 +2,8 @@ use std::path::Path;
 
 use tower_lsp::lsp_types::*;
 
-use crate::analysis::WorldIndex;
+use crate::analysis::{FileAnalysis, WorldIndex};
+use crate::ast::{Attribute, Entry};
 use crate::lexer::{Lexer, TokenKind};
 
 pub fn complete(index: &WorldIndex, path: &Path, pos: Position) -> Option<CompletionResponse> {
@@ -27,7 +28,7 @@ pub fn complete(index: &WorldIndex, path: &Path, pos: Position) -> Option<Comple
         }
     }
 
-    let offer_symbols = !prefix.is_empty() || is_symbol_position(index, &fa.source, offset);
+    let offer_symbols = !prefix.is_empty() || is_symbol_position(index, fa, offset);
     for sym in &index.all_symbols {
         if offer_symbols && sym.starts_with(&prefix) {
             items.push(CompletionItem {
@@ -60,7 +61,11 @@ fn prefix_at_offset(source: &str, offset: usize) -> String {
 
 /// Whether a symbol can start at `offset`, judged by the last token before
 /// it on the same line.
-fn is_symbol_position(index: &WorldIndex, source: &str, offset: usize) -> bool {
+fn is_symbol_position(index: &WorldIndex, fa: &FileAnalysis, offset: usize) -> bool {
+    if in_help_text(&fa.file.entries, offset) {
+        return false;
+    }
+    let source = &fa.source;
     let line_start = source[..offset].rfind('\n').map_or(0, |p| p + 1);
     let tokens = Lexer::new(&source[line_start..offset], &index.settings).tokenize();
     let kinds: Vec<&TokenKind> = tokens
@@ -99,6 +104,24 @@ fn is_symbol_position(index: &WorldIndex, source: &str, offset: usize) -> bool {
             | TokenKind::LessEq
             | TokenKind::GreaterEq
     )
+}
+
+fn in_help_text(entries: &[Entry], offset: usize) -> bool {
+    entries.iter().any(|entry| {
+        let (attributes, children): (&[Attribute], &[Entry]) = match entry {
+            Entry::Config(c) | Entry::ConfigDefault(c) | Entry::MenuConfig(c) => {
+                (&c.attributes, &[])
+            }
+            Entry::Choice(c) => (&c.attributes, &c.entries),
+            Entry::Comment(c) => (&c.attributes, &[]),
+            Entry::Menu(m) => (&m.attributes, &m.entries),
+            Entry::If(i) => (&[], &i.entries),
+            Entry::Source(_) | Entry::MainMenu(_) => (&[], &[]),
+        };
+        attributes.iter().any(
+            |a| matches!(a, Attribute::Help(h) if (h.span.start..=h.span.end).contains(&offset)),
+        ) || in_help_text(children, offset)
+    })
 }
 
 const KEYWORDS: &[&str] = &[
