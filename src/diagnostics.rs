@@ -14,8 +14,8 @@ pub fn collect(index: &WorldIndex, path: &Path) -> Vec<lsp::Diagnostic> {
     let mut diags: Vec<lsp::Diagnostic> = Vec::new();
 
     for pd in &fa.diagnostics {
-        let (line, col) = fa.line_index.line_col(pd.span.start);
-        let (end_line, end_col) = fa.line_index.line_col(pd.span.end);
+        let (line, col) = fa.line_index.line_col(&fa.source, pd.span.start);
+        let (end_line, end_col) = fa.line_index.line_col(&fa.source, pd.span.end);
         diags.push(lsp::Diagnostic {
             range: lsp::Range {
                 start: lsp::Position::new(line, col),
@@ -40,8 +40,8 @@ pub fn collect(index: &WorldIndex, path: &Path) -> Vec<lsp::Diagnostic> {
                 && !is_well_known_symbol(&r.name)
                 && !r.name.starts_with("$(")
             {
-                let (line, col) = fa.line_index.line_col(r.span.start);
-                let (end_line, end_col) = fa.line_index.line_col(r.span.end);
+                let (line, col) = fa.line_index.line_col(&fa.source, r.span.start);
+                let (end_line, end_col) = fa.line_index.line_col(&fa.source, r.span.end);
                 diags.push(lsp::Diagnostic {
                     range: lsp::Range {
                         start: lsp::Position::new(line, col),

@@ -8,7 +8,7 @@ use crate::lexer::{Lexer, TokenKind};
 
 pub fn complete(index: &WorldIndex, path: &Path, pos: Position) -> Option<CompletionResponse> {
     let fa = index.files.get(path)?;
-    let offset = fa.line_index.offset(pos.line, pos.character);
+    let offset = fa.line_index.offset(&fa.source, pos.line, pos.character);
     let prefix = prefix_at_offset(&fa.source, offset);
 
     let mut items: Vec<CompletionItem> = Vec::new();

@@ -20,7 +20,8 @@ impl Span {
     }
 }
 
-/// Line-offset lookup table for converting byte offsets to (line, col).
+/// Line-offset lookup table for converting between byte offsets and
+/// (line, col). Columns count UTF-16 code units, the LSP default.
 #[derive(Debug, Clone)]
 pub struct LineIndex {
     /// Byte offset of the start of each line.
@@ -38,24 +39,35 @@ impl LineIndex {
         Self { line_starts }
     }
 
-    /// Convert byte offset to 0-based (line, col).
-    pub fn line_col(&self, offset: usize) -> (u32, u32) {
+    /// Convert byte offset in `text` to 0-based (line, col).
+    pub fn line_col(&self, text: &str, offset: usize) -> (u32, u32) {
         let line = self
             .line_starts
             .partition_point(|&start| start <= offset)
             .saturating_sub(1);
-        let col = offset - self.line_starts[line];
+        let start = self.line_starts[line];
+        let col: usize = text[start..]
+            .char_indices()
+            .take_while(|&(i, _)| start + i < offset)
+            .map(|(_, ch)| ch.len_utf16())
+            .sum();
         (line as u32, col as u32)
     }
 
-    /// Convert 0-based (line, col) to byte offset.
-    pub fn offset(&self, line: u32, col: u32) -> usize {
-        let line = line as usize;
-        if line < self.line_starts.len() {
-            self.line_starts[line] + col as usize
-        } else {
-            self.line_starts.last().copied().unwrap_or(0)
+    /// Convert 0-based (line, col) to byte offset in `text`. A col past the
+    /// end of the line gives the end of the line.
+    pub fn offset(&self, text: &str, line: u32, col: u32) -> usize {
+        let Some(&start) = self.line_starts.get(line as usize) else {
+            return self.line_starts.last().copied().unwrap_or(0);
+        };
+        let mut units = 0;
+        for (i, ch) in text[start..].char_indices() {
+            if units >= col as usize || ch == '\n' {
+                return start + i;
+            }
+            units += ch.len_utf16();
         }
+        text.len()
     }
 
     pub fn line_count(&self) -> usize {

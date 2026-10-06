@@ -10,7 +10,7 @@ pub fn goto_definition(
     pos: Position,
 ) -> Option<GotoDefinitionResponse> {
     let fa = index.files.get(path)?;
-    let offset = fa.line_index.offset(pos.line, pos.character);
+    let offset = fa.line_index.offset(&fa.source, pos.line, pos.character);
     let word = word_at_offset(&fa.source, offset)?;
 
     // `configdefault` blocks come after the definitions.
@@ -27,8 +27,8 @@ pub fn goto_definition(
         .chain(configdefaults)
         .filter_map(|(file, span)| {
             let target_fa = index.files.get(file)?;
-            let (line, col) = target_fa.line_index.line_col(span.start);
-            let (end_line, end_col) = target_fa.line_index.line_col(span.end);
+            let (line, col) = target_fa.line_index.line_col(&target_fa.source, span.start);
+            let (end_line, end_col) = target_fa.line_index.line_col(&target_fa.source, span.end);
             let uri = Url::from_file_path(file).ok()?;
             Some(Location {
                 uri,

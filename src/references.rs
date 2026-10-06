@@ -6,15 +6,19 @@ use crate::analysis::WorldIndex;
 
 pub fn find_references(index: &WorldIndex, path: &Path, pos: Position) -> Option<Vec<Location>> {
     let fa = index.files.get(path)?;
-    let offset = fa.line_index.offset(pos.line, pos.character);
+    let offset = fa.line_index.offset(&fa.source, pos.line, pos.character);
     let word = word_at_offset(&fa.source, offset)?;
 
     let mut locations: Vec<Location> = Vec::new();
 
     for d in index.get_definitions(&word) {
         if let Some(target_fa) = index.files.get(&d.file) {
-            let (line, col) = target_fa.line_index.line_col(d.name_span.start);
-            let (end_line, end_col) = target_fa.line_index.line_col(d.name_span.end);
+            let (line, col) = target_fa
+                .line_index
+                .line_col(&target_fa.source, d.name_span.start);
+            let (end_line, end_col) = target_fa
+                .line_index
+                .line_col(&target_fa.source, d.name_span.end);
             if let Ok(uri) = Url::from_file_path(&d.file) {
                 locations.push(Location {
                     uri,
@@ -29,8 +33,10 @@ pub fn find_references(index: &WorldIndex, path: &Path, pos: Position) -> Option
 
     for r in index.get_references(&word) {
         if let Some(target_fa) = index.files.get(&r.file) {
-            let (line, col) = target_fa.line_index.line_col(r.span.start);
-            let (end_line, end_col) = target_fa.line_index.line_col(r.span.end);
+            let (line, col) = target_fa
+                .line_index
+                .line_col(&target_fa.source, r.span.start);
+            let (end_line, end_col) = target_fa.line_index.line_col(&target_fa.source, r.span.end);
             if let Ok(uri) = Url::from_file_path(&r.file) {
                 locations.push(Location {
                     uri,

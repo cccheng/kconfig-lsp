@@ -6,7 +6,7 @@ use crate::analysis::WorldIndex;
 
 pub fn hover(index: &WorldIndex, path: &Path, pos: Position) -> Option<Hover> {
     let fa = index.files.get(path)?;
-    let offset = fa.line_index.offset(pos.line, pos.character);
+    let offset = fa.line_index.offset(&fa.source, pos.line, pos.character);
     let word = word_at_offset(&fa.source, offset)?;
 
     let doc = keyword_docs(&word).or_else(|| {
