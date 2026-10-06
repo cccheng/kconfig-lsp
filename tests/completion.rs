@@ -214,3 +214,11 @@ fn symbols_offered_after_help_text() {
     syms.sort();
     assert_eq!(syms, ["BAR", "BAZ", "FOO"]);
 }
+
+#[test]
+fn config_without_a_name_is_no_symbol() {
+    let text = "config\n\nconfig BAZ\n\tbool \"baz\"\n\tdepends on ";
+    let mut syms = symbol_completions(Settings::default(), text);
+    syms.sort();
+    assert_eq!(syms, ["BAR", "BAZ", "FOO"]);
+}

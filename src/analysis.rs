@@ -216,6 +216,10 @@ fn collect_entries(
                     collect_attr_refs(attr, file, refs);
                 }
 
+                // A parse error can leave the name empty.
+                if c.name.is_empty() {
+                    continue;
+                }
                 defs.push(SymbolDef {
                     name: c.name.clone(),
                     kind,
