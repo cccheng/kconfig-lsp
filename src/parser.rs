@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::lexer::{Token, TokenKind};
+use crate::lexer::{Token, TokenKind, is_variable_name};
 
 pub struct ParseResult {
     pub file: KconfigFile,
@@ -29,8 +29,12 @@ struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     fn peek(&self) -> &TokenKind {
+        self.peek_at(self.pos)
+    }
+
+    fn peek_at(&self, i: usize) -> &TokenKind {
         self.tokens
-            .get(self.pos)
+            .get(i)
             .map(|t| &t.kind)
             .unwrap_or(&TokenKind::Eof)
     }
@@ -42,9 +46,30 @@ impl<'a> Parser<'a> {
             .unwrap_or(Span::new(self.source.len(), self.source.len()))
     }
 
+    /// Skips blank lines, comments and lines of macro calls such as
+    /// `$(warning,...)`. The calls are taken to expand to nothing.
     fn skip_newlines(&mut self) {
-        while matches!(self.peek(), TokenKind::Newline | TokenKind::LineComment(_)) {
-            self.pos += 1;
+        loop {
+            match self.peek() {
+                TokenKind::Newline | TokenKind::LineComment(_) => self.pos += 1,
+                TokenKind::Macro(_) => {
+                    let mut end = self.pos;
+                    while matches!(self.peek_at(end), TokenKind::Macro(_)) {
+                        end += 1;
+                    }
+                    if !matches!(
+                        self.peek_at(end),
+                        TokenKind::Newline | TokenKind::LineComment(_) | TokenKind::Eof
+                    ) {
+                        return;
+                    }
+                    for i in self.pos..end {
+                        self.check_macro_closed(self.tokens[i].span);
+                    }
+                    self.pos = end;
+                }
+                _ => return,
+            }
         }
     }
 
@@ -129,6 +154,7 @@ impl<'a> Parser<'a> {
             TokenKind::If => Some(self.parse_if()),
             TokenKind::Source => Some(self.parse_source()),
             TokenKind::MainMenu => Some(self.parse_mainmenu()),
+            TokenKind::Ident(_) | TokenKind::Macro(_) if self.skip_assignment() => None,
             _ => {
                 let span = self.current_span();
                 self.diag(span, "unexpected token at top level", DiagSeverity::Error);
@@ -136,6 +162,26 @@ impl<'a> Parser<'a> {
                 None
             }
         }
+    }
+
+    /// Skips a macro variable assignment, which makes no entry. Returns
+    /// false, without moving, for any other line.
+    fn skip_assignment(&mut self) -> bool {
+        let mut end = self.pos;
+        while matches!(self.peek_at(end), TokenKind::Ident(_) | TokenKind::Macro(_)) {
+            end += 1;
+        }
+        if *self.peek_at(end) != TokenKind::Assign || !is_variable_name(&self.tokens[self.pos..end])
+        {
+            return false;
+        }
+        end += 1;
+        if matches!(self.peek_at(end), TokenKind::AssignValue(_)) {
+            end += 1;
+        }
+        self.pos = end;
+        self.expect_newline();
+        true
     }
 
     // -----------------------------------------------------------------------

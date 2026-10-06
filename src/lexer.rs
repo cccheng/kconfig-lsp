@@ -61,6 +61,11 @@ pub enum TokenKind {
     // Macro invocation $(...)
     Macro(String),
 
+    // Macro variable assignment: `name = value`, `name := value` or
+    // `name += value`. The value is the rest of the line, unparsed.
+    Assign,
+    AssignValue(String),
+
     // Line comment: # ...
     LineComment(String),
 
@@ -129,14 +134,25 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn tokenize(mut self) -> Vec<Token> {
-        let mut tokens = Vec::new();
+        let mut tokens: Vec<Token> = Vec::new();
+        let mut line_start = 0;
         loop {
-            let tok = self.next_token();
-            let is_eof = tok.kind == TokenKind::Eof;
-            tokens.push(tok);
-            if is_eof {
-                break;
+            let mut tok = self.next_token();
+            match tok.kind {
+                TokenKind::Eof => {
+                    tokens.push(tok);
+                    break;
+                }
+                TokenKind::Newline => line_start = tokens.len() + 1,
+                TokenKind::Eq | TokenKind::Assign if is_variable_name(&tokens[line_start..]) => {
+                    tok.kind = TokenKind::Assign;
+                    tokens.push(tok);
+                    tokens.extend(self.lex_assign_value());
+                    continue;
+                }
+                _ => {}
             }
+            tokens.push(tok);
         }
         tokens
     }
@@ -244,6 +260,13 @@ impl<'a> Lexer<'a> {
                 kind: TokenKind::Eq,
                 span: Span::new(start, self.pos),
             },
+            b':' | b'+' if self.peek() == Some(b'=') => {
+                self.pos += 1;
+                Token {
+                    kind: TokenKind::Assign,
+                    span: Span::new(start, self.pos),
+                }
+            }
 
             b'<' if self.peek() == Some(b'=') => {
                 self.pos += 1;
@@ -334,6 +357,22 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// The value is taken as is up to the end of the line, so quotes,
+    /// parentheses and `#` in it do not start a token.
+    fn lex_assign_value(&mut self) -> Option<Token> {
+        self.skip_spaces();
+        let start = self.pos;
+        let len = self.src[start..]
+            .find('\n')
+            .unwrap_or(self.src.len() - start);
+        let value = self.src[start..start + len].trim_end_matches('\r');
+        self.pos = start + len;
+        (!value.is_empty()).then(|| Token {
+            kind: TokenKind::AssignValue(value.to_string()),
+            span: Span::new(start, start + value.len()),
+        })
+    }
+
     fn lex_ident(&mut self, start: usize) -> Token {
         while let Some(b) = self.peek() {
             if is_ident_cont(b) {
@@ -392,6 +431,16 @@ impl<'a> Lexer<'a> {
             _ => return None,
         })
     }
+}
+
+/// Whether `tokens` make one word, such as `cc-option` or `$(X)$(Y)`, that
+/// can name a macro variable.
+pub(crate) fn is_variable_name(tokens: &[Token]) -> bool {
+    !tokens.is_empty()
+        && tokens
+            .iter()
+            .all(|t| matches!(t.kind, TokenKind::Ident(_) | TokenKind::Macro(_)))
+        && tokens.windows(2).all(|w| w[0].span.end == w[1].span.start)
 }
 
 fn is_ident_start(b: u8) -> bool {

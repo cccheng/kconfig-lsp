@@ -1,6 +1,6 @@
 use kconfig_lsp::analysis::WorldIndex;
 use kconfig_lsp::ast::*;
-use kconfig_lsp::lexer::Lexer;
+use kconfig_lsp::lexer::{Lexer, TokenKind};
 use kconfig_lsp::parser;
 use kconfig_lsp::settings::Settings;
 use std::path::Path;
@@ -485,4 +485,150 @@ fn attribute_span_ends_after_a_closing_paren() {
             .unwrap();
         assert_eq!(&src[span.start..span.end], want, "{src:?}");
     }
+}
+
+#[test]
+fn macro_variables_and_calls_make_no_entries() {
+    let src = r#"comma := ,
+quote := "
+left_paren := (
+empty :=
+cc-info := $(shell,$(CC) --version) # not a comment
+if-success = $(shell,{ $(1); } >/dev/null 2>&1 && echo "$(2)" || echo "$(3)")
+flags += -O2
+$(X)$(Y) := 5
+CONFIG_BPF=y
+$(error-if,$(failure,command -v $(CC)),C compiler '$(CC)' not found)
+$(info,a) $(info,b)
+
+menu "m"
+inner := x
+endmenu
+
+if A
+inner := y
+endif
+
+config B
+	bool "b"
+	depends on C = y
+config_c := z
+config C
+	bool "c"
+"#;
+    let tokens = Lexer::new(src, &Settings::default()).tokenize();
+    let result = parser::parse(src, tokens);
+    assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+    assert_eq!(config_names(&result.file), ["B", "C"]);
+    assert_eq!(result.file.entries.len(), 4);
+}
+
+#[test]
+fn macro_variable_value_is_the_rest_of_the_line() {
+    for (src, op, value) in [
+        ("x := a # b\n", ":=", Some("a # b")),
+        ("quote := \"\n", ":=", Some("\"")),
+        ("flags += -O2\n", "+=", Some("-O2")),
+        ("CONFIG_BPF=y\r\n", "=", Some("y")),
+        ("x := a \\\n", ":=", Some("a \\")),
+        ("empty :=\n", ":=", None),
+    ] {
+        let tokens = Lexer::new(src, &Settings::default()).tokenize();
+        let assign = tokens.iter().find(|t| t.kind == TokenKind::Assign);
+        assert_eq!(assign.map(|t| &src[t.span.start..t.span.end]), Some(op));
+        let got = tokens.iter().find_map(|t| match &t.kind {
+            TokenKind::AssignValue(v) => Some(v.as_str()),
+            _ => None,
+        });
+        assert_eq!(got, value, "{src:?}");
+    }
+}
+
+#[test]
+fn macro_variable_name_is_one_word() {
+    for src in [
+        "defaul FOO = y\n",
+        "foo bar := x\n",
+        "foo\n",
+        "$(info,a) foo\n",
+    ] {
+        let tokens = Lexer::new(src, &Settings::default()).tokenize();
+        let result = parser::parse(src, tokens);
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.severity == DiagSeverity::Error),
+            "{src:?}"
+        );
+    }
+}
+
+#[test]
+fn macro_call_lines_do_not_end_attributes() {
+    let src = "config A\n\tbool \"a\"\n$(info,x)\n\tdefault y\n\t$(warning,w) # c\n\thelp\n\t  Text.\n\nchoice\n\tprompt \"c\"\n\t$(info,y)\n\tdefault B\n\nconfig B\n\tbool \"b\"\n\nendchoice\n";
+    let tokens = Lexer::new(src, &Settings::default()).tokenize();
+    let result = parser::parse(src, tokens);
+    assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+    let [Entry::Config(a), Entry::Choice(c)] = result.file.entries.as_slice() else {
+        panic!("expected config A and a choice: {:?}", result.file.entries);
+    };
+    assert!(
+        a.attributes
+            .iter()
+            .any(|x| matches!(x, Attribute::Default(_)))
+    );
+    assert_eq!(help_attr(&result.file, "A").text, "Text.");
+    assert!(
+        c.attributes
+            .iter()
+            .any(|x| matches!(x, Attribute::Default(_)))
+    );
+}
+
+#[test]
+fn macro_call_line_errors() {
+    for (line, want) in [
+        ("$(info,x))", "unexpected token at top level"),
+        ("$(warning,broken", "expected `)`"),
+    ] {
+        let src = format!("{line}\nconfig B\n\tbool \"b\"\n");
+        let tokens = Lexer::new(&src, &Settings::default()).tokenize();
+        let result = parser::parse(&src, tokens);
+        let errors: Vec<_> = result
+            .diagnostics
+            .iter()
+            .filter(|d| d.severity == DiagSeverity::Error)
+            .map(|d| d.message.as_str())
+            .collect();
+        assert_eq!(errors, [want], "{src:?}");
+        assert_eq!(config_names(&result.file), ["B"], "{src:?}");
+    }
+}
+
+#[test]
+fn macro_lines_at_end_of_file() {
+    for src in ["x := 1", "$(info,x)", "config A\n\tbool \"a\"\n\t$(info,x)"] {
+        let tokens = Lexer::new(src, &Settings::default()).tokenize();
+        let result = parser::parse(src, tokens);
+        assert!(
+            result.diagnostics.is_empty(),
+            "{src:?}: {:?}",
+            result.diagnostics
+        );
+    }
+}
+
+#[test]
+fn assignment_in_help_text_is_text() {
+    let src =
+        "config A\n\tbool \"a\"\n\thelp\n\t  CONFIG_FOO=y and x := $(y\nconfig B\n\tbool \"b\"\n";
+    let tokens = Lexer::new(src, &Settings::default()).tokenize();
+    let result = parser::parse(src, tokens);
+    assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+    assert_eq!(
+        help_attr(&result.file, "A").text,
+        "CONFIG_FOO=y and x := $(y"
+    );
+    assert_eq!(config_names(&result.file), ["A", "B"]);
 }

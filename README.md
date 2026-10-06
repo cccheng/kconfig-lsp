@@ -17,7 +17,7 @@ Full coverage of the Kconfig grammar defined in `Documentation/kbuild/kconfig-la
 - All entry types: `config`, `menuconfig`, `choice`, `comment`, `menu`, `if`, `source`, `mainmenu`
 - All attributes: `bool`, `tristate`, `string`, `hex`, `int`, `prompt`, `default`, `def_bool`, `def_tristate`, `depends on`, `select`, `imply`, `visible if`, `range`, `help`, `modules`, `transitional`, `optional`
 - Full expression syntax with correct precedence: `||`, `&&`, `=`, `!=`, `<`, `>`, `<=`, `>=`, `!`, `()`
-- Macro invocations `$(...)`
+- Macro invocations `$(...)` and macro variable assignments with `=`, `:=` and `+=`
 - Line continuations `\`
 
 ## Installation
@@ -66,7 +66,7 @@ kconfig-lsp
 | Attribute keywords | `prompt` `default` `def_bool` `def_tristate` `depends` `on` `select` `imply` `visible` `range` `help` `modules` `transitional` `optional` |
 | Operators | `=` `!=` `<` `>` `<=` `>=` `!` `&&` `\|\|` `(` `)` |
 | Literals | `"double quoted"` `'single quoted'` |
-| Macros | `$(cc-option,...)` `$(success,...)` |
+| Macros | `$(cc-option,...)` `$(success,...)` `name = value` `name := value` `name += value` |
 | Zephyr extensions (with `zephyr_extensions`) | `configdefault` `def_int` `def_hex` `def_string` |
 
 ## Configuration
