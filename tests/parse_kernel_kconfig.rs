@@ -311,6 +311,30 @@ fn help_without_text_at_end_of_file() {
     assert_eq!(help_attr(&result.file, "A").text, "");
 }
 
+fn config_names(file: &KconfigFile) -> Vec<&str> {
+    file.entries
+        .iter()
+        .filter_map(|e| match e {
+            Entry::Config(c) => Some(c.name.as_str()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn help_ends_at_an_unindented_line() {
+    for src in [
+        "config A\n\tbool \"a\"\n\thelp\nconfig B\n\tbool \"b\"\n",
+        "config A\n\tbool \"a\"\n\thelp\n\nconfig B\n\tbool \"b\"\n",
+    ] {
+        let tokens = Lexer::new(src, &Settings::default()).tokenize();
+        let result = parser::parse(src, tokens);
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert_eq!(help_attr(&result.file, "A").text, "", "{src:?}");
+        assert_eq!(config_names(&result.file), ["A", "B"], "{src:?}");
+    }
+}
+
 #[test]
 fn help_text_with_crlf_line_endings() {
     let body: String = (0..12)

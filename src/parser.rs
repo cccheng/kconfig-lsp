@@ -390,6 +390,9 @@ impl<'a> Parser<'a> {
     }
 
     /// Returns the help text and the offset where its last line ends.
+    ///
+    /// The text ends at the first non-blank line indented less than its
+    /// first line. A first line without indent ends it at once.
     fn consume_help_text(&mut self) -> (String, Option<usize>) {
         let mut lines: Vec<&str> = Vec::new();
         let mut base_indent: Option<usize> = None;
@@ -414,15 +417,9 @@ impl<'a> Parser<'a> {
                 continue;
             }
             let indent = line.len() - trimmed.len();
-            match base_indent {
-                None => {
-                    base_indent = Some(indent);
-                }
-                Some(bi) => {
-                    if indent < bi {
-                        break;
-                    }
-                }
+            let base = *base_indent.get_or_insert(indent);
+            if indent == 0 || indent < base {
+                break;
             }
             lines.push(line);
             text_end = Some(raw_start + consumed + line.len());
