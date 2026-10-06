@@ -80,6 +80,15 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Reports a macro that the lexer ended at the end of the line because
+    /// its `)` is missing.
+    fn check_macro_closed(&mut self, span: Span) {
+        let text = &self.source[span.start..span.end];
+        if text.matches('(').count() > text.matches(')').count() {
+            self.diag(span, "expected `)`", DiagSeverity::Error);
+        }
+    }
+
     fn diag(&mut self, span: Span, msg: &str, severity: DiagSeverity) {
         self.diagnostics.push(ParseDiagnostic {
             message: msg.to_string(),
@@ -698,6 +707,7 @@ impl<'a> Parser<'a> {
             TokenKind::Macro(m) => {
                 let span = self.current_span();
                 self.pos += 1;
+                self.check_macro_closed(span);
                 Expr::Symbol(format!("$({})", m), span)
             }
             // Tristate literals y/n/m are identifiers in the lexer;
@@ -756,6 +766,7 @@ impl<'a> Parser<'a> {
             TokenKind::Macro(m) => {
                 let span = self.current_span();
                 self.pos += 1;
+                self.check_macro_closed(span);
                 (format!("$({})", m), span)
             }
             _ => {

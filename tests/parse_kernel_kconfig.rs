@@ -392,6 +392,34 @@ fn help_text_with_crlf_line_endings() {
 }
 
 #[test]
+fn unclosed_macro_ends_at_the_end_of_the_line() {
+    for (line, mac) in [
+        ("\tdefault $(foo", "$(foo"),
+        ("\tprompt $(foo,(bar)", "$(foo,(bar)"),
+    ] {
+        let src = format!("config A\n{line}\nconfig B\n\tbool \"b\"\n");
+        let tokens = Lexer::new(&src, &Settings::default()).tokenize();
+        let result = parser::parse(&src, tokens);
+        let errors: Vec<_> = result
+            .diagnostics
+            .iter()
+            .filter(|d| d.severity == DiagSeverity::Error)
+            .map(|d| (d.message.as_str(), &src[d.span.start..d.span.end]))
+            .collect();
+        assert_eq!(errors, [("expected `)`", mac)], "{src:?}");
+        assert_eq!(config_names(&result.file), ["A", "B"], "{src:?}");
+    }
+
+    // Help text is not Kconfig, so a macro in it is not checked.
+    let src = "config A\n\tbool \"a\"\n\thelp\n\t  See $(srctree.\nconfig B\n\tbool \"b\"\n";
+    let tokens = Lexer::new(src, &Settings::default()).tokenize();
+    let result = parser::parse(src, tokens);
+    assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+    assert_eq!(help_attr(&result.file, "A").text, "See $(srctree.");
+    assert_eq!(config_names(&result.file), ["A", "B"]);
+}
+
+#[test]
 fn depends_on_with_if_condition() {
     let src = "config A\n\tbool \"a\"\n\tdepends on (B && C) if D\n";
     let tokens = Lexer::new(src, &Settings::default()).tokenize();

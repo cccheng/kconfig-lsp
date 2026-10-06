@@ -318,12 +318,14 @@ impl<'a> Lexer<'a> {
         let mut depth = 1u32;
         let body_start = self.pos;
         while depth > 0 {
-            match self.advance() {
+            // Without its `)`, a macro ends at the end of the line.
+            match self.peek() {
+                Some(b'\n') | None => break,
                 Some(b'(') => depth += 1,
                 Some(b')') => depth -= 1,
-                None => break,
                 _ => {}
             }
+            self.pos += 1;
         }
         let body_end = if depth == 0 { self.pos - 1 } else { self.pos };
         Token {
