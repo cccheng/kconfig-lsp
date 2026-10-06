@@ -18,8 +18,9 @@ pub fn complete(index: &WorldIndex, path: &Path, pos: Position) -> Option<Comple
     } else {
         &[]
     };
+    let offer_keywords = !prefix.is_empty() || is_keyword_position(fa, offset);
     for kw in KEYWORDS.iter().chain(zephyr_keywords) {
-        if kw.starts_with(&prefix) || prefix.is_empty() {
+        if offer_keywords && kw.starts_with(&prefix) {
             items.push(CompletionItem {
                 label: kw.to_string(),
                 kind: Some(CompletionItemKind::KEYWORD),
@@ -57,6 +58,16 @@ fn prefix_at_offset(source: &str, offset: usize) -> String {
         start -= 1;
     }
     source[start..offset].to_string()
+}
+
+/// Whether a keyword can start at `offset`: only blanks precede it on its
+/// line, outside help text.
+fn is_keyword_position(fa: &FileAnalysis, offset: usize) -> bool {
+    let line_start = fa.source[..offset].rfind('\n').map_or(0, |p| p + 1);
+    fa.source[line_start..offset]
+        .bytes()
+        .all(|b| b == b' ' || b == b'\t')
+        && !in_help_text(&fa.file.entries, offset)
 }
 
 /// Whether a symbol can start at `offset`, judged by the last token before
@@ -115,7 +126,8 @@ fn in_help_text(entries: &[Entry], offset: usize) -> bool {
             Entry::Source(_) | Entry::MainMenu(_) => (&[], &[]),
         };
         attributes.iter().any(
-            |a| matches!(a, Attribute::Help(h) if (h.span.start..=h.span.end).contains(&offset)),
+            // A cursor right before `help` is not in the text.
+            |a| matches!(a, Attribute::Help(h) if h.span.start < offset && offset <= h.span.end),
         ) || in_help_text(children, offset)
     })
 }

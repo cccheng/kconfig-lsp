@@ -7,26 +7,43 @@ use tower_lsp::lsp_types::{CompletionItemKind, CompletionResponse, Position};
 
 const DEFS: &str = "config FOO\n\tbool \"foo\"\n\nconfig BAR\n\tint \"bar\"\n\n";
 
-/// Symbols offered with the cursor at the end of `text`, appended to `DEFS`.
-fn symbol_completions(settings: Settings, text: &str) -> Vec<String> {
+/// Labels of `kind` offered with the cursor between `before` and `after`,
+/// appended to `DEFS`.
+fn completions(
+    settings: Settings,
+    before: &str,
+    after: &str,
+    kind: CompletionItemKind,
+) -> Vec<String> {
     let mut index = WorldIndex::new();
     index.settings = settings;
     let path = Path::new("test/Kconfig");
-    let src = format!("{DEFS}{text}");
+    let src = format!("{DEFS}{before}{after}");
     index.analyze_file(path, &src);
-    let line_start = src.rfind('\n').map_or(0, |p| p + 1);
+    let cursor = DEFS.len() + before.len();
+    let line_start = src[..cursor].rfind('\n').map_or(0, |p| p + 1);
     let pos = Position::new(
-        src.matches('\n').count() as u32,
-        (src.len() - line_start) as u32,
+        src[..cursor].matches('\n').count() as u32,
+        (cursor - line_start) as u32,
     );
     match completion::complete(&index, path, pos) {
         Some(CompletionResponse::Array(items)) => items
             .into_iter()
-            .filter(|i| i.kind == Some(CompletionItemKind::CONSTANT))
+            .filter(|i| i.kind == Some(kind))
             .map(|i| i.label)
             .collect(),
         _ => Vec::new(),
     }
+}
+
+/// Symbols offered with the cursor at the end of `text`, appended to `DEFS`.
+fn symbol_completions(settings: Settings, text: &str) -> Vec<String> {
+    completions(settings, text, "", CompletionItemKind::CONSTANT)
+}
+
+/// Keywords offered with the cursor at the end of `text`, appended to `DEFS`.
+fn keyword_completions(text: &str) -> Vec<String> {
+    completions(Settings::default(), text, "", CompletionItemKind::KEYWORD)
 }
 
 fn zephyr() -> Settings {
@@ -127,6 +144,67 @@ fn no_symbols_in_help_text() {
             "text {text:?}"
         );
     }
+}
+
+#[test]
+fn keywords_offered_where_a_line_starts() {
+    for text in [
+        "",
+        "\t",
+        "  ",
+        "config BAZ\n\tbool \"baz\"\n\t",
+        "config BAZ\n\tbool \"baz\"\n\thelp\n\t  Some text.\n\t",
+    ] {
+        let keywords = keyword_completions(text);
+        assert!(keywords.iter().any(|k| k == "config"), "text {text:?}");
+        assert!(keywords.iter().any(|k| k == "depends"), "text {text:?}");
+    }
+}
+
+#[test]
+fn keywords_offered_before_help() {
+    let keywords = completions(
+        Settings::default(),
+        "config BAZ\n\tbool \"baz\"\n\t",
+        "help\n\t  Text.\n",
+        CompletionItemKind::KEYWORD,
+    );
+    assert!(keywords.iter().any(|k| k == "depends"));
+}
+
+#[test]
+fn no_keywords_without_prefix_after_text() {
+    for text in [
+        "config ",
+        "\tbool ",
+        "\tbool \"use if ",
+        "\tdepends on ",
+        "\tdepends on FOO && ",
+        "\tdefault y if ",
+        "# ",
+        "config BAZ\n\tbool \"baz\"\n\thelp\n\t  Say Y here if ",
+    ] {
+        assert!(keyword_completions(text).is_empty(), "text {text:?}");
+    }
+}
+
+#[test]
+fn no_keywords_on_a_blank_line_in_help_text() {
+    let keywords = completions(
+        Settings::default(),
+        "config BAZ\n\tbool \"baz\"\n\thelp\n\t  Para one.\n\t  ",
+        "\n\t  Para two.\n",
+        CompletionItemKind::KEYWORD,
+    );
+    assert!(keywords.is_empty());
+}
+
+#[test]
+fn keyword_prefix_still_matches_anywhere() {
+    assert_eq!(
+        keyword_completions("\tbool \"a\" i"),
+        ["if", "int", "imply"]
+    );
 }
 
 #[test]
