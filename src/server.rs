@@ -9,7 +9,7 @@ use tower_lsp::{Client, LanguageServer};
 
 use crate::analysis::WorldIndex;
 use crate::settings::Settings;
-use crate::{completion, definition, diagnostics, hover, references};
+use crate::{completion, definition, diagnostics, hover, references, symbols};
 
 pub struct Backend {
     client: Client,
@@ -95,6 +95,7 @@ impl LanguageServer for Backend {
                     trigger_characters: Some(vec![" ".into(), "\t".into()]),
                     ..Default::default()
                 }),
+                document_symbol_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -250,6 +251,18 @@ impl LanguageServer for Backend {
             None => return Ok(None),
         };
         Ok(completion::complete(&idx, &path, pos))
+    }
+
+    async fn document_symbol(
+        &self,
+        params: DocumentSymbolParams,
+    ) -> Result<Option<DocumentSymbolResponse>> {
+        let idx = self.index.lock().unwrap();
+        let path = match Self::uri_to_path(&params.text_document.uri) {
+            Some(p) => p,
+            None => return Ok(None),
+        };
+        Ok(symbols::document_symbols(&idx, &path))
     }
 }
 

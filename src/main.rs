@@ -9,6 +9,7 @@ mod parser;
 mod references;
 mod server;
 mod settings;
+mod symbols;
 
 use tower_lsp::{LspService, Server};
 

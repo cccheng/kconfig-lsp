@@ -10,6 +10,7 @@ A language server for the Kconfig configuration language used in Linux, Zephyr, 
 | `textDocument/definition` | Jump to `config` / `menuconfig` definition and `configdefault` blocks |
 | `textDocument/references` | Find all references to a symbol |
 | `textDocument/completion` | Complete keywords and known symbols |
+| `textDocument/documentSymbol` | Outline of menus, choices, `if` blocks and symbols |
 | `textDocument/publishDiagnostics` | Parse errors and undefined symbol warnings |
 
 Full coverage of the Kconfig grammar defined in `Documentation/kbuild/kconfig-language.rst`:
