@@ -632,3 +632,18 @@ fn assignment_in_help_text_is_text() {
     );
     assert_eq!(config_names(&result.file), ["A", "B"]);
 }
+
+#[test]
+fn strings_keep_non_ascii_characters() {
+    for (src, want) in [
+        ("\"OLPC CAFÉ NAND\"", "OLPC CAFÉ NAND"),
+        ("'naïve \\é'", "naïve é"),
+    ] {
+        let tokens = Lexer::new(src, &Settings::default()).tokenize();
+        assert_eq!(
+            tokens[0].kind,
+            TokenKind::StringLit(want.to_string()),
+            "{src:?}"
+        );
+    }
+}

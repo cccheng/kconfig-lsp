@@ -316,21 +316,22 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_string(&mut self, start: usize, quote: u8) -> Token {
-        let mut value = String::new();
+        // Collect bytes, so a character of more than one byte stays whole.
+        let mut value = Vec::new();
         loop {
             match self.advance() {
                 Some(b) if b == quote => break,
                 Some(b'\\') => {
                     if let Some(esc) = self.advance() {
-                        value.push(esc as char);
+                        value.push(esc);
                     }
                 }
                 Some(b'\n') | None => break, // unterminated string
-                Some(b) => value.push(b as char),
+                Some(b) => value.push(b),
             }
         }
         Token {
-            kind: TokenKind::StringLit(value),
+            kind: TokenKind::StringLit(String::from_utf8_lossy(&value).into_owned()),
             span: Span::new(start, self.pos),
         }
     }
