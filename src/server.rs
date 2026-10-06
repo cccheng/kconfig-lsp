@@ -96,6 +96,7 @@ impl LanguageServer for Backend {
                     ..Default::default()
                 }),
                 document_symbol_provider: Some(OneOf::Left(true)),
+                workspace_symbol_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -263,6 +264,14 @@ impl LanguageServer for Backend {
             None => return Ok(None),
         };
         Ok(symbols::document_symbols(&idx, &path))
+    }
+
+    async fn symbol(
+        &self,
+        params: WorkspaceSymbolParams,
+    ) -> Result<Option<Vec<SymbolInformation>>> {
+        let idx = self.index.lock().unwrap();
+        Ok(Some(symbols::workspace_symbols(&idx, &params.query)))
     }
 }
 

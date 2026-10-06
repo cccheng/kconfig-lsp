@@ -2,7 +2,7 @@ use std::path::Path;
 
 use tower_lsp::lsp_types::*;
 
-use crate::analysis::{FileAnalysis, WorldIndex};
+use crate::analysis::{FileAnalysis, SymbolDef, WorldIndex};
 use crate::ast::{Attribute, Entry, Span};
 
 /// The outline of a file. Menus, choices and `if` blocks hold the entries
@@ -13,6 +13,36 @@ pub fn document_symbols(index: &WorldIndex, path: &Path) -> Option<DocumentSymbo
         fa,
         &fa.file.entries,
     )))
+}
+
+/// The definitions in all indexed files whose names contain `query`,
+/// ignoring case. An empty query matches all definitions.
+#[allow(deprecated)]
+pub fn workspace_symbols(index: &WorldIndex, query: &str) -> Vec<SymbolInformation> {
+    let query = query.to_lowercase();
+    let mut defs: Vec<&SymbolDef> = index
+        .definitions
+        .values()
+        .flatten()
+        .filter(|d| d.name.to_lowercase().contains(&query))
+        .collect();
+    defs.sort_by(|a, b| {
+        (&a.name, &a.file, a.name_span.start).cmp(&(&b.name, &b.file, b.name_span.start))
+    });
+    defs.into_iter()
+        .filter_map(|d| {
+            let fa = index.files.get(&d.file)?;
+            let uri = Url::from_file_path(&d.file).ok()?;
+            Some(SymbolInformation {
+                name: d.name.clone(),
+                kind: SymbolKind::VARIABLE,
+                tags: None,
+                deprecated: None,
+                location: Location::new(uri, range(fa, d.name_span)),
+                container_name: None,
+            })
+        })
+        .collect()
 }
 
 fn entry_symbols(fa: &FileAnalysis, entries: &[Entry]) -> Vec<DocumentSymbol> {

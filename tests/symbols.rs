@@ -110,3 +110,55 @@ fn outline_names_unnamed_blocks_by_keyword() {
         ]
     );
 }
+
+/// Workspace symbols as `name file range`, with files relative to the
+/// current directory.
+fn search(query: &str) -> Vec<String> {
+    let dir = std::env::current_dir().unwrap();
+    let mut index = WorldIndex::new();
+    // A file URI needs an absolute path.
+    index.analyze_file(
+        &dir.join("Kconfig"),
+        "config USB\n\tbool \"usb\"\n\nmenuconfig USB_STORAGE\n\ttristate \"storage\"\n\nconfig NET\n\tbool\n",
+    );
+    // The last config has no name, so it makes no symbol.
+    index.analyze_file(
+        &dir.join("drivers/Kconfig"),
+        "config USB\n\tdef_bool y\n\nconfig\n",
+    );
+    symbols::workspace_symbols(&index, query)
+        .into_iter()
+        .map(|s| {
+            let file = s.location.uri.to_file_path().unwrap();
+            let file = file.strip_prefix(&dir).unwrap().display().to_string();
+            format!("{} {file} {}", s.name, pos(s.location.range))
+        })
+        .collect()
+}
+
+#[test]
+fn workspace_symbols_match_names_ignoring_case() {
+    assert_eq!(
+        search("usb"),
+        [
+            "USB Kconfig 0:7-0:10",
+            "USB drivers/Kconfig 0:7-0:10",
+            "USB_STORAGE Kconfig 3:11-3:22",
+        ]
+    );
+    assert_eq!(search("Stor"), ["USB_STORAGE Kconfig 3:11-3:22"]);
+    assert!(search("PCI").is_empty());
+}
+
+#[test]
+fn empty_workspace_symbol_query_matches_all() {
+    assert_eq!(
+        search(""),
+        [
+            "NET Kconfig 6:7-6:10",
+            "USB Kconfig 0:7-0:10",
+            "USB drivers/Kconfig 0:7-0:10",
+            "USB_STORAGE Kconfig 3:11-3:22",
+        ]
+    );
+}
