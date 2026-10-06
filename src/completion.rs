@@ -67,24 +67,20 @@ fn is_symbol_position(index: &WorldIndex, fa: &FileAnalysis, offset: usize) -> b
     }
     let source = &fa.source;
     let line_start = source[..offset].rfind('\n').map_or(0, |p| p + 1);
-    let tokens = Lexer::new(&source[line_start..offset], &index.settings).tokenize();
-    let kinds: Vec<&TokenKind> = tokens
-        .iter()
-        .map(|t| &t.kind)
-        .filter(|k| !matches!(k, TokenKind::Newline | TokenKind::Eof))
-        .collect();
-    let (Some(first), Some(last)) = (kinds.first(), kinds.last()) else {
+    let mut tokens = Lexer::new(&source[line_start..offset], &index.settings).tokenize();
+    tokens.pop(); // Eof
+    let (Some(first), Some(last)) = (tokens.first(), tokens.last()) else {
         return false;
     };
     // Help text and other prose start with a plain word.
     if matches!(
-        first,
+        first.kind,
         TokenKind::Ident(_) | TokenKind::StringLit(_) | TokenKind::Macro(_)
     ) {
         return false;
     }
     matches!(
-        last,
+        last.kind,
         TokenKind::On
             | TokenKind::Select
             | TokenKind::Imply
