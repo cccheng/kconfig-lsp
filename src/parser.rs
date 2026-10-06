@@ -382,17 +382,18 @@ impl<'a> Parser<'a> {
         self.pos += 1; // skip `help`
         self.skip_to_eol();
 
-        let help_text = self.consume_help_text();
-        let end_offset = start.end + help_text.len();
+        let (text, text_end) = self.consume_help_text();
         Attribute::Help(HelpAttr {
-            text: help_text,
-            span: start.merge(Span::new(start.start, end_offset)),
+            text,
+            span: Span::new(start.start, text_end.unwrap_or(start.end)),
         })
     }
 
-    fn consume_help_text(&mut self) -> String {
+    /// Returns the help text and the offset where its last line ends.
+    fn consume_help_text(&mut self) -> (String, Option<usize>) {
         let mut lines: Vec<&str> = Vec::new();
         let mut base_indent: Option<usize> = None;
+        let mut text_end = None;
 
         let src = self.source;
 
@@ -403,14 +404,15 @@ impl<'a> Parser<'a> {
         let remaining = &src[raw_start..];
 
         let mut consumed = 0usize;
-        for raw_line in remaining.lines() {
-            let trimmed = raw_line.trim_start();
+        for raw_line in remaining.split_inclusive('\n') {
+            let line = raw_line.trim_end_matches(['\n', '\r']);
+            let trimmed = line.trim_start();
             if trimmed.is_empty() {
                 lines.push("");
-                consumed += raw_line.len() + 1;
+                consumed += raw_line.len();
                 continue;
             }
-            let indent = raw_line.len() - trimmed.len();
+            let indent = line.len() - trimmed.len();
             match base_indent {
                 None => {
                     base_indent = Some(indent);
@@ -421,8 +423,9 @@ impl<'a> Parser<'a> {
                     }
                 }
             }
-            lines.push(raw_line);
-            consumed += raw_line.len() + 1;
+            lines.push(line);
+            text_end = Some(raw_start + consumed + line.len());
+            consumed += raw_line.len();
         }
 
         // Advance the token stream past the consumed help text.
@@ -436,7 +439,7 @@ impl<'a> Parser<'a> {
 
         // Strip the base indent from each line.
         let bi = base_indent.unwrap_or(0);
-        lines
+        let text = lines
             .iter()
             .map(|l| {
                 if l.len() > bi {
@@ -448,7 +451,8 @@ impl<'a> Parser<'a> {
             .collect::<Vec<_>>()
             .join("\n")
             .trim_end()
-            .to_string()
+            .to_string();
+        (text, text_end)
     }
 
     // -----------------------------------------------------------------------

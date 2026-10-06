@@ -276,3 +276,51 @@ fn help_text_does_not_swallow_next_entry() {
         names
     );
 }
+
+fn help_attr(file: &KconfigFile, name: &str) -> HelpAttr {
+    file.entries
+        .iter()
+        .find_map(|e| match e {
+            Entry::Config(c) if c.name == name => c.attributes.iter().find_map(|a| match a {
+                Attribute::Help(h) => Some(h.clone()),
+                _ => None,
+            }),
+            _ => None,
+        })
+        .expect("help attribute")
+}
+
+#[test]
+fn help_span_covers_the_whole_text() {
+    let src =
+        "config A\n\tbool \"a\"\n\thelp\n\t  Line one.\n\t  Line two.\n\nconfig B\n\tbool \"b\"\n";
+    let tokens = Lexer::new(src, &Settings::default()).tokenize();
+    let result = parser::parse(src, tokens);
+    let span = help_attr(&result.file, "A").span;
+    assert_eq!(
+        &src[span.start..span.end],
+        "help\n\t  Line one.\n\t  Line two."
+    );
+}
+
+#[test]
+fn help_text_with_crlf_line_endings() {
+    let body: String = (0..12)
+        .map(|i| format!("\t  Line {i} depends on foo.\r\n"))
+        .collect();
+    let src =
+        format!("config A\r\n\tbool \"a\"\r\n\thelp\r\n{body}\r\nconfig B\r\n\tbool \"b\"\r\n");
+    let tokens = Lexer::new(&src, &Settings::default()).tokenize();
+    let result = parser::parse(&src, tokens);
+    assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+    let help = help_attr(&result.file, "A");
+    assert!(help.text.starts_with("Line 0 depends on foo.\nLine 1"));
+    assert!(src[..help.span.end].ends_with("Line 11 depends on foo."));
+    assert!(
+        result
+            .file
+            .entries
+            .iter()
+            .any(|e| matches!(e, Entry::Config(c) if c.name == "B"))
+    );
+}
