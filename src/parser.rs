@@ -671,15 +671,19 @@ impl<'a> Parser<'a> {
                 Expr::Not(Box::new(inner))
             }
             TokenKind::OpenParen => {
+                let open = self.current_span();
                 self.pos += 1;
                 let inner = self.parse_expr();
-                if *self.peek() == TokenKind::CloseParen {
+                let end = if *self.peek() == TokenKind::CloseParen {
+                    let close = self.current_span();
                     self.pos += 1;
+                    close
                 } else {
                     let span = self.current_span();
                     self.diag(span, "expected `)`", DiagSeverity::Error);
-                }
-                Expr::Paren(Box::new(inner))
+                    inner.span()
+                };
+                Expr::Paren(Box::new(inner), open.merge(end))
             }
             TokenKind::StringLit(s) => {
                 let span = self.current_span();

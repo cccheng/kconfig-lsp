@@ -260,14 +260,15 @@ pub enum Expr {
     LessEq(Box<Expr>, Box<Expr>),
     Greater(Box<Expr>, Box<Expr>),
     GreaterEq(Box<Expr>, Box<Expr>),
-    Paren(Box<Expr>),
+    /// The span covers the parentheses.
+    Paren(Box<Expr>, Span),
 }
 
 impl Expr {
     pub fn span(&self) -> Span {
         match self {
-            Expr::Symbol(_, s) | Expr::StringLit(_, s) => *s,
-            Expr::Not(e) | Expr::Paren(e) => e.span(),
+            Expr::Symbol(_, s) | Expr::StringLit(_, s) | Expr::Paren(_, s) => *s,
+            Expr::Not(e) => e.span(),
             Expr::And(a, b)
             | Expr::Or(a, b)
             | Expr::Eq(a, b)
@@ -284,7 +285,7 @@ impl Expr {
         match self {
             Expr::Symbol(name, span) => out.push((name.clone(), *span)),
             Expr::StringLit(..) => {}
-            Expr::Not(e) | Expr::Paren(e) => e.collect_symbols(out),
+            Expr::Not(e) | Expr::Paren(e, _) => e.collect_symbols(out),
             Expr::And(a, b)
             | Expr::Or(a, b)
             | Expr::Eq(a, b)

@@ -416,3 +416,45 @@ fn depends_on_with_if_condition() {
         assert_eq!(index.get_references(name).len(), 1, "{name}");
     }
 }
+
+#[test]
+fn attribute_span_ends_after_a_closing_paren() {
+    for (src, want) in [
+        (
+            "config A\n\tbool \"a\"\n\tdepends on B if (C)\n",
+            "depends on B if (C)",
+        ),
+        (
+            "config A\n\tbool \"a\"\n\tdepends on B if (C) # x\n",
+            "depends on B if (C)",
+        ),
+        (
+            "config A\n\tbool \"a\"\n\tdepends on B if (C)",
+            "depends on B if (C)",
+        ),
+        (
+            "config A\n\tbool \"a\"\n\tdepends on (B || C)\n",
+            "depends on (B || C)",
+        ),
+        (
+            "config A\n\tbool \"a\"\n\tdepends on !(B)\n",
+            "depends on !(B)",
+        ),
+    ] {
+        let tokens = Lexer::new(src, &Settings::default()).tokenize();
+        let result = parser::parse(src, tokens);
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        let Some(Entry::Config(a)) = result.file.entries.first() else {
+            panic!("expected config A");
+        };
+        let span = a
+            .attributes
+            .iter()
+            .find_map(|attr| match attr {
+                Attribute::DependsOn(d) => Some(d.span),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(&src[span.start..span.end], want, "{src:?}");
+    }
+}
