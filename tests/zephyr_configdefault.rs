@@ -573,6 +573,63 @@ fn zephyr_keywords_have_hover_docs_only_when_extension_enabled() {
         let off = index_with(Settings::default(), src);
         assert!(hover::hover(&off, Path::new("test/Kconfig"), pos).is_none());
     }
+
+    // `gsource` and `grsource` show the docs of their new names.
+    let sources = [
+        ("rsource", "rsource"),
+        ("osource", "osource"),
+        ("orsource", "orsource"),
+        ("gsource", "osource"),
+        ("grsource", "orsource"),
+    ];
+    for (kw, doc) in sources {
+        let src = format!("{kw} \"Kconfig.a\"\n");
+        let pos = Position::new(0, 2);
+
+        let on = index_with(settings(), &src);
+        assert!(hover_text(&on, pos).starts_with(&format!("**{doc}**")));
+
+        let off = index_with(Settings::default(), &src);
+        assert!(hover::hover(&off, Path::new("test/Kconfig"), pos).is_none());
+    }
+}
+
+#[test]
+fn zephyr_source_keywords_only_when_extension_enabled() {
+    for kw in ["rsource", "osource", "orsource", "gsource", "grsource"] {
+        let src = format!("{kw} \"Kconfig.a\"\nconfig A\n\tbool \"a\"\n");
+        let parse = |settings: &Settings| {
+            let tokens = Lexer::new(&src, settings).tokenize();
+            parser::parse(&src, tokens)
+        };
+
+        let on = parse(&settings());
+        assert!(on.diagnostics.is_empty(), "{kw}: {:?}", on.diagnostics);
+        let [Entry::Source(source), Entry::Config(_)] = &on.file.entries[..] else {
+            panic!("{kw}: {:?}", on.file.entries);
+        };
+        assert_eq!(source.path, "Kconfig.a");
+
+        let off = parse(&Settings::default());
+        assert!(
+            off.diagnostics
+                .iter()
+                .any(|d| d.severity == DiagSeverity::Error),
+            "{kw}"
+        );
+    }
+}
+
+#[test]
+fn zephyr_source_keywords_complete_only_when_extension_enabled() {
+    for kw in ["rsource", "osource", "orsource"] {
+        let prefix = &kw[..3];
+        assert_eq!(keyword_completions(settings(), prefix), [kw]);
+        assert!(keyword_completions(Settings::default(), prefix).is_empty());
+    }
+    // The old names are not offered.
+    assert!(keyword_completions(settings(), "gs").is_empty());
+    assert!(keyword_completions(settings(), "grs").is_empty());
 }
 
 /// Goto needs an absolute path to make a file URI.

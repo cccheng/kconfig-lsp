@@ -165,4 +165,12 @@ const KEYWORDS: &[&str] = &[
 ];
 
 /// Keywords only recognized with `zephyr_extensions` enabled.
-const ZEPHYR_KEYWORDS: &[&str] = &["configdefault", "def_int", "def_hex", "def_string"];
+const ZEPHYR_KEYWORDS: &[&str] = &[
+    "configdefault",
+    "def_int",
+    "def_hex",
+    "def_string",
+    "rsource",
+    "osource",
+    "orsource",
+];

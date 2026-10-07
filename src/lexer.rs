@@ -405,6 +405,13 @@ impl<'a> Lexer<'a> {
             "if" => TokenKind::If,
             "endif" => TokenKind::EndIf,
             "source" => TokenKind::Source,
+            // Zephyr: relative, optional, and both. `gsource` and `grsource`
+            // are old names of `osource` and `orsource`.
+            "rsource" | "osource" | "orsource" | "gsource" | "grsource"
+                if self.settings.zephyr_extensions =>
+            {
+                TokenKind::Source
+            }
             "mainmenu" => TokenKind::MainMenu,
             "bool" => TokenKind::Bool,
             "tristate" => TokenKind::Tristate,

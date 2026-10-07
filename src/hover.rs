@@ -137,6 +137,30 @@ Shorthand for a `hex` type definition plus a default value (Zephyr)."
 Shorthand for a `string` type definition plus a default value (Zephyr)."
         }
 
+        "rsource" => {
+            "\
+**rsource** `<path>`
+
+Like `source`, but the path is relative to the directory of this file \
+(Zephyr)."
+        }
+
+        "osource" | "gsource" => {
+            "\
+**osource** `<path>`
+
+Like `source`, but no error if no file matches the path (Zephyr). \
+`gsource` is an old name of `osource`."
+        }
+
+        "orsource" | "grsource" => {
+            "\
+**orsource** `<path>`
+
+Like `rsource`, but no error if no file matches the path (Zephyr). \
+`grsource` is an old name of `orsource`."
+        }
+
         _ => return None,
     })
 }
