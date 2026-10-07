@@ -29,6 +29,7 @@ configdefault TEST_CONFIG
 fn settings() -> Settings {
     Settings {
         zephyr_extensions: true,
+        ..Default::default()
     }
 }
 

@@ -49,6 +49,7 @@ fn keyword_completions(text: &str) -> Vec<String> {
 fn zephyr() -> Settings {
     Settings {
         zephyr_extensions: true,
+        ..Default::default()
     }
 }
 

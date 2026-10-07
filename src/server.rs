@@ -128,7 +128,8 @@ impl LanguageServer for Backend {
 
         let root = self.workspace_root.lock().unwrap().clone();
         if let Some(root) = root {
-            let kconfig_files = discover_kconfig_files(&root);
+            let settings = self.settings.lock().unwrap().clone();
+            let kconfig_files = discover_kconfig_files(&root, &settings);
             log::info!(
                 "discovered {} Kconfig files in workspace",
                 kconfig_files.len()
@@ -292,7 +293,7 @@ impl LanguageServer for Backend {
     }
 }
 
-fn discover_kconfig_files(root: &Path) -> Vec<PathBuf> {
+fn discover_kconfig_files(root: &Path, settings: &Settings) -> Vec<PathBuf> {
     let mut result = Vec::new();
     let mut stack = vec![root.to_path_buf()];
 
@@ -307,7 +308,11 @@ fn discover_kconfig_files(root: &Path) -> Vec<PathBuf> {
                 if !is_ignored_dir(&path) {
                     stack.push(path);
                 }
-            } else if is_kconfig_file(&path) {
+            } else if path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| settings.is_kconfig_file(n))
+            {
                 result.push(path);
             }
         }
@@ -316,18 +321,48 @@ fn discover_kconfig_files(root: &Path) -> Vec<PathBuf> {
     result
 }
 
-fn is_kconfig_file(path: &Path) -> bool {
-    let name = match path.file_name().and_then(|n| n.to_str()) {
-        Some(n) => n,
-        None => return false,
-    };
-    name == "Kconfig" || name.starts_with("Kconfig.") || name.starts_with("Kconfig_")
-}
-
 fn is_ignored_dir(path: &Path) -> bool {
     let name = match path.file_name().and_then(|n| n.to_str()) {
         Some(n) => n,
         None => return true,
     };
     matches!(name, ".git" | ".hg" | ".svn" | "node_modules" | ".repo")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn discover_reads_only_files_that_match_the_patterns() {
+        let root =
+            std::env::temp_dir().join(format!("kconfig-lsp-discover-{}", std::process::id()));
+        for file in [
+            "Config.in",
+            "package/foo/Config.in",
+            "Kconfig",
+            ".git/Config.in",
+        ] {
+            let path = root.join(file);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, "").unwrap();
+        }
+        let settings = Settings {
+            kconfig_files: vec!["Config.in".to_string()],
+            ..Default::default()
+        };
+        let mut found: Vec<_> = discover_kconfig_files(&root, &settings)
+            .into_iter()
+            .map(|p| p.strip_prefix(&root).unwrap().to_path_buf())
+            .collect();
+        found.sort();
+        std::fs::remove_dir_all(&root).unwrap();
+        assert_eq!(
+            found,
+            [
+                PathBuf::from("Config.in"),
+                PathBuf::from("package/foo/Config.in")
+            ]
+        );
+    }
 }

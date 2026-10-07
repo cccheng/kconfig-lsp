@@ -81,6 +81,7 @@ the wrong type are reported as a warning.
 | option | type | default value | description |
 |---|---|---|---|
 | `zephyr_extensions` | bool | false | accept `configdefault`, `def_int`, `def_hex`, `def_string`, `rsource`, `osource` and `orsource` from the [Zephyr Kconfig extensions](https://docs.zephyrproject.org/latest/build/kconfig/extensions.html), and do not warn about undefined `DT_HAS_*_ENABLED` and `BOARD_*` symbols, because Zephyr makes most of them at build time |
+| `kconfig_files` | list of strings | `["Kconfig", "Kconfig.*", "Kconfig_*"]` | patterns of the names of the files to read from the workspace. `*` matches any characters and `?` matches one character. The list replaces the default. For example, use `["Config.in*"]` for Buildroot, or `["Kconfig", "Config.in", "Config-*.in"]` for OpenWrt. The editor must also give these files the Kconfig file type |
 
 Neovim passes them through `init_options`:
 

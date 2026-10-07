@@ -43,6 +43,7 @@ fn check(src: &str) -> Vec<(String, String, DiagnosticSeverity)> {
 fn zephyr() -> Settings {
     Settings {
         zephyr_extensions: true,
+        ..Default::default()
     }
 }
 

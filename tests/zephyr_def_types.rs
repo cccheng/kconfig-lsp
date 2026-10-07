@@ -18,6 +18,7 @@ config TEST_USES_DEF_STRING
 fn settings() -> Settings {
     Settings {
         zephyr_extensions: true,
+        ..Default::default()
     }
 }
 

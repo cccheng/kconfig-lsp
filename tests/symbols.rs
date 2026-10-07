@@ -10,6 +10,7 @@ fn index(src: &str) -> (WorldIndex, PathBuf) {
     let mut index = WorldIndex::new();
     index.settings = Settings {
         zephyr_extensions: true,
+        ..Default::default()
     };
     index.analyze_file(&path, src);
     (index, path)
