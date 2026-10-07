@@ -28,7 +28,10 @@ pub fn collect(index: &WorldIndex, path: &Path) -> Vec<lsp::Diagnostic> {
             if r.file.as_os_str() != path.as_os_str() {
                 continue;
             }
-            if index.get_definitions(&r.name).is_empty() && !r.name.starts_with("$(") {
+            if index.get_definitions(&r.name).is_empty()
+                && !r.name.starts_with("$(")
+                && !(index.settings.zephyr_extensions && is_made_by_zephyr(&r.name))
+            {
                 diags.push(diagnostic(
                     fa,
                     r.span,
@@ -60,4 +63,10 @@ fn diagnostic(
         message,
         ..Default::default()
     }
+}
+
+/// Zephyr makes most of these symbols at build time, from the devicetree
+/// and the list of boards.
+fn is_made_by_zephyr(name: &str) -> bool {
+    (name.starts_with("DT_HAS_") && name.ends_with("_ENABLED")) || name.starts_with("BOARD_")
 }

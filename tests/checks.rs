@@ -380,3 +380,29 @@ config A
         )]
     );
 }
+
+#[test]
+fn zephyr_symbols_made_at_build_time_are_not_undefined() {
+    let src = "\
+config A
+\tbool \"a\"
+\tdepends on DT_HAS_FOO_ENABLED || BOARD_BAR
+";
+    assert_eq!(diags_with(zephyr(), &[("Kconfig", src)]), []);
+    let mut names: Vec<String> = check(src).into_iter().map(|d| d.0).collect();
+    names.sort();
+    assert_eq!(names, ["BOARD_BAR", "DT_HAS_FOO_ENABLED"]);
+
+    // Zephyr makes only `DT_HAS_*_ENABLED`, so a typo still gets a warning.
+    let src = "\
+config A
+\tbool \"a\"
+\tdepends on DT_HAS_FOO || DT_HAS_FOO_ENABELD
+";
+    let mut names: Vec<String> = diags_with(zephyr(), &[("Kconfig", src)])
+        .into_iter()
+        .map(|d| d.0)
+        .collect();
+    names.sort();
+    assert_eq!(names, ["DT_HAS_FOO", "DT_HAS_FOO_ENABELD"]);
+}

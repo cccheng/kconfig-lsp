@@ -80,7 +80,7 @@ the wrong type are reported as a warning.
 
 | option | type | default value | description |
 |---|---|---|---|
-| `zephyr_extensions` | bool | false | accept `configdefault`, `def_int`, `def_hex` and `def_string` from the [Zephyr Kconfig extensions](https://docs.zephyrproject.org/latest/build/kconfig/extensions.html) |
+| `zephyr_extensions` | bool | false | accept `configdefault`, `def_int`, `def_hex` and `def_string` from the [Zephyr Kconfig extensions](https://docs.zephyrproject.org/latest/build/kconfig/extensions.html), and do not warn about undefined `DT_HAS_*_ENABLED` and `BOARD_*` symbols, because Zephyr makes most of them at build time |
 
 Neovim passes them through `init_options`:
 
