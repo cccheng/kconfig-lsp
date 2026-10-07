@@ -17,6 +17,7 @@ pub fn check(index: &WorldIndex, file: &KconfigFile) -> Vec<ParseDiagnostic> {
                 );
             }
             check_type(index, c, in_choice, &mut out);
+            check_select(index, c, &mut out);
             check_help(&c.attributes, &mut out);
         }
         Entry::Choice(c) => check_help(&c.attributes, &mut out),
@@ -68,6 +69,41 @@ fn check_type(
     {
         let message = format!("no definition of `{}` gives it a type", c.name);
         push(out, c.name_span, &message, DiagSeverity::Warning);
+    }
+}
+
+/// The type of a symbol, if its definitions give one and do not disagree.
+fn symbol_type(index: &WorldIndex, name: &str) -> Option<TypeKind> {
+    let mut types = index
+        .get_definitions(name)
+        .iter()
+        .filter_map(|d| d.type_kind);
+    let first = types.next()?;
+    types.all(|t| t == first).then_some(first)
+}
+
+/// `select` and `imply` work only from and to bool or tristate symbols.
+fn check_select(index: &WorldIndex, c: &ConfigEntry, out: &mut Vec<ParseDiagnostic>) {
+    let is_bool = |t: &TypeKind| matches!(t, TypeKind::Bool | TypeKind::Tristate);
+    let own = symbol_type(index, &c.name).filter(|t| !is_bool(t));
+    for attr in &c.attributes {
+        let (keyword, s) = match attr {
+            Attribute::Select(s) => ("select", s),
+            Attribute::Imply(s) => ("imply", s),
+            _ => continue,
+        };
+        let (name, t, span) = if let Some(t) = own {
+            (&c.name, t, s.span)
+        } else if let Some(t) = symbol_type(index, &s.symbol).filter(|t| !is_bool(t)) {
+            (&s.symbol, t, s.symbol_span)
+        } else {
+            continue;
+        };
+        let message = format!(
+            "`{name}` is {}, but `{keyword}` works only with bool or tristate symbols",
+            t.as_str()
+        );
+        push(out, span, &message, DiagSeverity::Warning);
     }
 }
 

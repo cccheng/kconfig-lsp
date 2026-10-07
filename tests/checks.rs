@@ -132,3 +132,63 @@ config E
         [diag("E", "no definition of `E` gives it a type", WARNING)]
     );
 }
+
+#[test]
+fn select_and_imply_work_only_with_bool_or_tristate() {
+    let src = "\
+config A
+\tint \"a\"
+\tselect B
+\timply B
+
+config B
+\tbool
+
+config C
+\ttristate \"c\"
+\tselect D
+\timply F
+\timply B
+
+config D
+\tint
+
+config F
+\thex
+";
+    let msg = |name: &str, t: &str, keyword: &str| {
+        format!("`{name}` is {t}, but `{keyword}` works only with bool or tristate symbols")
+    };
+    assert_eq!(
+        check(src),
+        [
+            diag("select B", &msg("A", "int", "select"), WARNING),
+            diag("imply B", &msg("A", "int", "imply"), WARNING),
+            diag("D", &msg("D", "int", "select"), WARNING),
+            diag("F", &msg("F", "hex", "imply"), WARNING),
+        ]
+    );
+
+    // The type can come from another file. Definitions that do not agree
+    // on the type give no type.
+    let src = "\
+config A
+\tdef_bool y
+\tselect T
+\tselect X
+
+config X
+\tint
+";
+    let other = "\
+config T
+\tstring
+
+config X
+\tbool
+";
+    assert_eq!(
+        diags(&[("Kconfig", src), ("other/Kconfig", other)]),
+        [diag("T", &msg("T", "string", "select"), WARNING)]
+    );
+}
