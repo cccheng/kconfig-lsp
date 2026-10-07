@@ -7,9 +7,8 @@ use crate::ast::{DiagSeverity, Span};
 use crate::checks;
 
 pub fn collect(index: &WorldIndex, path: &Path) -> Vec<lsp::Diagnostic> {
-    let fa = match index.files.get(path) {
-        Some(fa) => fa,
-        None => return Vec::new(),
+    let Some((path, fa)) = index.files.get_key_value(path) else {
+        return Vec::new();
     };
 
     let mut diags: Vec<lsp::Diagnostic> = Vec::new();
@@ -24,7 +23,9 @@ pub fn collect(index: &WorldIndex, path: &Path) -> Vec<lsp::Diagnostic> {
 
     for ref_entry in index.references.values() {
         for r in ref_entry {
-            if r.file != path {
+            // The references of the file have the path of its key. Comparing
+            // the bytes is much faster than comparing `Path` components.
+            if r.file.as_os_str() != path.as_os_str() {
                 continue;
             }
             if index.get_definitions(&r.name).is_empty()
