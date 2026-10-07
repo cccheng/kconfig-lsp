@@ -406,3 +406,32 @@ config A
     names.sort();
     assert_eq!(names, ["DT_HAS_FOO", "DT_HAS_FOO_ENABELD"]);
 }
+
+#[test]
+fn name_that_fails_to_parse_is_no_undefined_symbol() {
+    let src = "\
+config A
+\tbool \"a\"
+\tselect $(module)_TRIGGER
+\timply $(module)
+
+configdefault $(module)
+\tdefault y
+";
+    // Only the parse errors, and no warning for a symbol without a name.
+    let errors = |text| {
+        [
+            diag(text, "expected identifier", ERROR),
+            diag(text, "expected end of line", WARNING),
+        ]
+    };
+    assert_eq!(
+        diags_with(zephyr(), &[("Kconfig", src)]),
+        [
+            errors("$(module)"),
+            errors("$(module)"),
+            errors("$(module)")
+        ]
+        .concat()
+    );
+}

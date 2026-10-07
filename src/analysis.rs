@@ -245,12 +245,7 @@ fn collect_entries(
                     file: file.to_path_buf(),
                 });
                 // configdefault is in fact a reference
-                refs.push(SymbolRef {
-                    name: c.name.clone(),
-                    kind: RefKind::Default,
-                    span: c.name_span,
-                    file: file.to_path_buf(),
-                });
+                push_ref(&c.name, RefKind::Default, c.name_span, file, refs);
                 // handle references used within configdefault
                 for attr in &c.attributes {
                     collect_attr_refs(attr, file, refs);
@@ -291,23 +286,13 @@ fn collect_attr_refs(attr: &Attribute, file: &Path, refs: &mut Vec<SymbolRef>) {
             }
         }
         Attribute::Select(s) => {
-            refs.push(SymbolRef {
-                name: s.symbol.clone(),
-                kind: RefKind::Select,
-                span: s.symbol_span,
-                file: file.to_path_buf(),
-            });
+            push_ref(&s.symbol, RefKind::Select, s.symbol_span, file, refs);
             if let Some(cond) = &s.condition {
                 collect_expr_refs(cond, RefKind::Select, file, refs);
             }
         }
         Attribute::Imply(i) => {
-            refs.push(SymbolRef {
-                name: i.symbol.clone(),
-                kind: RefKind::Imply,
-                span: i.symbol_span,
-                file: file.to_path_buf(),
-            });
+            push_ref(&i.symbol, RefKind::Imply, i.symbol_span, file, refs);
             if let Some(cond) = &i.condition {
                 collect_expr_refs(cond, RefKind::Imply, file, refs);
             }
@@ -355,16 +340,24 @@ fn collect_expr_refs(expr: &Expr, kind: RefKind, file: &Path, refs: &mut Vec<Sym
     let mut syms = Vec::new();
     expr.collect_symbols(&mut syms);
     for (name, span) in syms {
-        if is_tristate_literal(&name) || name.is_empty() || is_numeric_literal(&name) {
-            continue;
+        if !is_tristate_literal(&name) && !is_numeric_literal(&name) {
+            push_ref(&name, kind, span, file, refs);
         }
-        refs.push(SymbolRef {
-            name,
-            kind,
-            span,
-            file: file.to_path_buf(),
-        });
     }
+}
+
+/// Records a reference. A parse error can leave the name empty, and an
+/// empty name refers to no symbol, so skip it.
+fn push_ref(name: &str, kind: RefKind, span: Span, file: &Path, refs: &mut Vec<SymbolRef>) {
+    if name.is_empty() {
+        return;
+    }
+    refs.push(SymbolRef {
+        name: name.to_string(),
+        kind,
+        span,
+        file: file.to_path_buf(),
+    });
 }
 
 fn is_tristate_literal(s: &str) -> bool {
