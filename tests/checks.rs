@@ -370,4 +370,13 @@ config A
         diags(&[("Kconfig", src), ("other/Kconfig", other)]),
         [undefined("C"), undefined("C")]
     );
+    // No name is exempt, also not one that most trees define.
+    assert_eq!(
+        check("config A\n\tbool \"a\"\n\tdepends on MODULES\n"),
+        [diag(
+            "MODULES",
+            "symbol `MODULES` is not defined in the workspace",
+            WARNING
+        )]
+    );
 }

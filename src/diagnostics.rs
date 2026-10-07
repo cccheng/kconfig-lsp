@@ -28,10 +28,7 @@ pub fn collect(index: &WorldIndex, path: &Path) -> Vec<lsp::Diagnostic> {
             if r.file.as_os_str() != path.as_os_str() {
                 continue;
             }
-            if index.get_definitions(&r.name).is_empty()
-                && !is_well_known_symbol(&r.name)
-                && !r.name.starts_with("$(")
-            {
+            if index.get_definitions(&r.name).is_empty() && !r.name.starts_with("$(") {
                 diags.push(diagnostic(
                     fa,
                     r.span,
@@ -63,27 +60,4 @@ fn diagnostic(
         message,
         ..Default::default()
     }
-}
-
-fn is_well_known_symbol(name: &str) -> bool {
-    matches!(
-        name,
-        "y" | "n"
-            | "m"
-            | "MODULES"
-            | "COMPILE_TEST"
-            | "EXPERT"
-            | "NET"
-            | "BLOCK"
-            | "SMP"
-            | "PCI"
-            | "USB"
-            | "HAS_IOMEM"
-            | "HAS_DMA"
-            | "MMU"
-            | "OF"
-            | "ACPI"
-            | "PM"
-            | "ARCH_HAS_DMA_PREP_COHERENT"
-    )
 }
