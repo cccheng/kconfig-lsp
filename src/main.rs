@@ -1,5 +1,6 @@
 mod analysis;
 mod ast;
+mod checks;
 mod completion;
 mod definition;
 mod diagnostics;

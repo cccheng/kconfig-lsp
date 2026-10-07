@@ -1,5 +1,6 @@
 pub mod analysis;
 pub mod ast;
+pub mod checks;
 pub mod completion;
 pub mod definition;
 pub mod diagnostics;
