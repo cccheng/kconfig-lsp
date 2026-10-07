@@ -192,3 +192,34 @@ config X
         [diag("T", &msg("T", "string", "select"), WARNING)]
     );
 }
+
+#[test]
+fn range_works_only_with_int_or_hex() {
+    let src = "\
+config A
+\tbool \"a\"
+\trange 1 5
+
+config B
+\tint \"b\"
+\trange 1 5
+
+config C
+\thex \"c\"
+\trange 0x10 0x20 if A
+
+config S
+\tstring \"s\"
+\trange 0 10 if A
+";
+    let msg = |name: &str, t: &str| {
+        format!("`{name}` is {t}, but `range` works only with int or hex symbols")
+    };
+    assert_eq!(
+        check(src),
+        [
+            diag("range 1 5", &msg("A", "bool"), WARNING),
+            diag("range 0 10 if A", &msg("S", "string"), WARNING),
+        ]
+    );
+}

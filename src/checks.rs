@@ -18,6 +18,7 @@ pub fn check(index: &WorldIndex, file: &KconfigFile) -> Vec<ParseDiagnostic> {
             }
             check_type(index, c, in_choice, &mut out);
             check_select(index, c, &mut out);
+            check_range(index, c, &mut out);
             check_help(&c.attributes, &mut out);
         }
         Entry::Choice(c) => check_help(&c.attributes, &mut out),
@@ -105,6 +106,27 @@ fn check_select(index: &WorldIndex, c: &ConfigEntry, out: &mut Vec<ParseDiagnost
         );
         push(out, span, &message, DiagSeverity::Warning);
     }
+}
+
+/// `range` works only for int or hex symbols.
+fn check_range(index: &WorldIndex, c: &ConfigEntry, out: &mut Vec<ParseDiagnostic>) {
+    let Some(t) = symbol_type(index, &c.name).filter(|t| !is_number(t)) else {
+        return;
+    };
+    for attr in &c.attributes {
+        if let Attribute::Range(r) = attr {
+            let message = format!(
+                "`{}` is {}, but `range` works only with int or hex symbols",
+                c.name,
+                t.as_str()
+            );
+            push(out, r.span, &message, DiagSeverity::Warning);
+        }
+    }
+}
+
+fn is_number(t: &TypeKind) -> bool {
+    matches!(t, TypeKind::Int | TypeKind::Hex)
 }
 
 fn check_help(attrs: &[Attribute], out: &mut Vec<ParseDiagnostic>) {
