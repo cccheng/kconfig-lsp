@@ -36,7 +36,7 @@ pub fn collect(index: &WorldIndex, path: &Path) -> Vec<lsp::Diagnostic> {
                     fa,
                     r.span,
                     DiagnosticSeverity::WARNING,
-                    format!("symbol `{}` is not defined in any open file", r.name),
+                    format!("symbol `{}` is not defined in the workspace", r.name),
                 ));
             }
         }

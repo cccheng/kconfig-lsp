@@ -278,7 +278,7 @@ configdefault A
             diag("\"z\"", "`z` is not a valid int value", WARNING),
             diag(
                 "UNDEF",
-                "symbol `UNDEF` is not defined in any open file",
+                "symbol `UNDEF` is not defined in the workspace",
                 WARNING
             ),
         ]
@@ -353,5 +353,21 @@ fn default_of_string_int_or_hex_is_one_value() {
             diag("0x1 || B", &msg("H", "hex"), WARNING),
             diag("(1 || B)", &msg("N", "int"), WARNING),
         ]
+    );
+}
+
+#[test]
+fn undefined_symbols_get_a_warning() {
+    let src = "\
+config A
+\tbool \"a\"
+\tdepends on B && C && $(FOO)
+\tdefault y if !C
+";
+    let other = "config B\n\tbool \"b\"\n";
+    let undefined = |text| diag(text, "symbol `C` is not defined in the workspace", WARNING);
+    assert_eq!(
+        diags(&[("Kconfig", src), ("other/Kconfig", other)]),
+        [undefined("C"), undefined("C")]
     );
 }
