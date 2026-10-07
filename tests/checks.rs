@@ -339,3 +339,19 @@ config B
         ]
     );
 }
+
+#[test]
+fn default_of_string_int_or_hex_is_one_value() {
+    let src = "config S\n\tstring \"s\"\n\tdefault \"a\" || B\n\tdefault (\"x\") if B\n\tdefault B\n\nconfig N\n\tint \"n\"\n\tdefault 1 && B\n\tdefault !B\n\nconfig B\n\tbool \"b\"\n\tdefault B && !B\n\nconfig H\n\tdef_hex 0x1 || B\n\nconfigdefault N\n\tdefault (1 || B)\n";
+    let msg = |name, t| format!("`{name}` is {t}, so its default must be one value");
+    assert_eq!(
+        diags_with(zephyr(), &[("Kconfig", src)]),
+        vec![
+            diag("\"a\" || B", &msg("S", "string"), WARNING),
+            diag("1 && B", &msg("N", "int"), WARNING),
+            diag("!B", &msg("N", "int"), WARNING),
+            diag("0x1 || B", &msg("H", "hex"), WARNING),
+            diag("(1 || B)", &msg("N", "int"), WARNING),
+        ]
+    );
+}

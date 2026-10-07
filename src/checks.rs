@@ -20,10 +20,14 @@ pub fn check(index: &WorldIndex, file: &KconfigFile) -> Vec<ParseDiagnostic> {
             check_select(index, c, &mut out);
             check_range(index, c, &mut out);
             check_numbers(index, c, &mut out);
+            check_single_defaults(index, c, &mut out);
             check_transitional(c, &mut out);
             check_help(&c.attributes, &mut out);
         }
-        Entry::ConfigDefault(c) => check_numbers(index, c, &mut out),
+        Entry::ConfigDefault(c) => {
+            check_numbers(index, c, &mut out);
+            check_single_defaults(index, c, &mut out);
+        }
         Entry::Choice(c) => check_help(&c.attributes, &mut out),
         _ => {}
     });
@@ -176,6 +180,31 @@ fn check_number(index: &WorldIndex, t: TypeKind, value: &Expr, out: &mut Vec<Par
     if !is_valid_number(t, text) {
         let message = format!("`{text}` is not a valid {} value", t.as_str());
         push(out, span, &message, DiagSeverity::Warning);
+    }
+}
+
+/// The default of a string, int or hex symbol must be one value, not an
+/// expression.
+fn check_single_defaults(index: &WorldIndex, c: &ConfigEntry, out: &mut Vec<ParseDiagnostic>) {
+    let Some(t) =
+        symbol_type(index, &c.name).filter(|t| !matches!(t, TypeKind::Bool | TypeKind::Tristate))
+    else {
+        return;
+    };
+    for attr in &c.attributes {
+        let value = match attr {
+            Attribute::Default(d) => &d.value,
+            Attribute::DefType(d) => &d.value,
+            _ => continue,
+        };
+        if !matches!(unparen(value), Expr::Symbol(..) | Expr::StringLit(..)) {
+            let message = format!(
+                "`{}` is {}, so its default must be one value",
+                c.name,
+                t.as_str()
+            );
+            push(out, value.span(), &message, DiagSeverity::Warning);
+        }
     }
 }
 
