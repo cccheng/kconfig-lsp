@@ -56,6 +56,16 @@ impl Backend {
             .publish_diagnostics(uri.clone(), diags, None)
             .await;
     }
+
+    /// The diagnostics of a file can depend on other files, such as for
+    /// undefined symbols and types. So publish them for all open files
+    /// after a change to the index.
+    async fn publish_all_diagnostics(&self) {
+        let open_uris: Vec<Url> = self.documents.iter().map(|e| e.key().clone()).collect();
+        for uri in open_uris {
+            self.publish_diagnostics(&uri).await;
+        }
+    }
 }
 
 #[tower_lsp::async_trait]
@@ -149,12 +159,8 @@ impl LanguageServer for Backend {
                 .await;
         }
 
-        // Re-publish diagnostics for any already-open files so that symbols
-        // resolved by the workspace scan clear their warnings.
-        let open_uris: Vec<Url> = self.documents.iter().map(|e| e.key().clone()).collect();
-        for uri in open_uris {
-            self.publish_diagnostics(&uri).await;
-        }
+        // Symbols that the workspace scan found clear their warnings.
+        self.publish_all_diagnostics().await;
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -170,7 +176,7 @@ impl LanguageServer for Backend {
             let mut idx = self.index.lock().unwrap();
             idx.reanalyze_file(&path, &text);
         }
-        self.publish_diagnostics(&uri).await;
+        self.publish_all_diagnostics().await;
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
@@ -183,7 +189,7 @@ impl LanguageServer for Backend {
                 let mut idx = self.index.lock().unwrap();
                 idx.reanalyze_file(&path, &text);
             }
-            self.publish_diagnostics(&uri).await;
+            self.publish_all_diagnostics().await;
         }
     }
 
@@ -202,6 +208,7 @@ impl LanguageServer for Backend {
             let mut idx = self.index.lock().unwrap();
             idx.reanalyze_file(&path, &source);
         }
+        self.publish_all_diagnostics().await;
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
