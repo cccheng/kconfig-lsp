@@ -19,8 +19,10 @@ pub fn check(index: &WorldIndex, file: &KconfigFile) -> Vec<ParseDiagnostic> {
             check_type(index, c, in_choice, &mut out);
             check_select(index, c, &mut out);
             check_range(index, c, &mut out);
+            check_numbers(index, c, &mut out);
             check_help(&c.attributes, &mut out);
         }
+        Entry::ConfigDefault(c) => check_numbers(index, c, &mut out),
         Entry::Choice(c) => check_help(&c.attributes, &mut out),
         _ => {}
     });
@@ -127,6 +129,79 @@ fn check_range(index: &WorldIndex, c: &ConfigEntry, out: &mut Vec<ParseDiagnosti
 
 fn is_number(t: &TypeKind) -> bool {
     matches!(t, TypeKind::Int | TypeKind::Hex)
+}
+
+/// The defaults and range bounds of an int or hex symbol must be numbers,
+/// or int or hex symbols.
+fn check_numbers(index: &WorldIndex, c: &ConfigEntry, out: &mut Vec<ParseDiagnostic>) {
+    let Some(t) = symbol_type(index, &c.name).filter(is_number) else {
+        return;
+    };
+    for attr in &c.attributes {
+        let values = match attr {
+            Attribute::Default(d) => vec![&d.value],
+            Attribute::DefType(d) => vec![&d.value],
+            Attribute::Range(r) => vec![&r.low, &r.high],
+            _ => continue,
+        };
+        for value in values {
+            check_number(index, t, value, out);
+        }
+    }
+}
+
+fn check_number(index: &WorldIndex, t: TypeKind, value: &Expr, out: &mut Vec<ParseDiagnostic>) {
+    let (text, span, is_string) = match unparen(value) {
+        Expr::Symbol(s, span) => (s, *span, false),
+        Expr::StringLit(s, span) => (s, *span, true),
+        _ => return,
+    };
+    // The value of a macro is not known.
+    if text.contains("$(") {
+        return;
+    }
+    if !is_string && !index.get_definitions(text).is_empty() {
+        if let Some(t2) = symbol_type(index, text).filter(|t| !is_number(t)) {
+            let message = format!("`{text}` is {}, not int or hex", t2.as_str());
+            push(out, span, &message, DiagSeverity::Warning);
+        }
+        return;
+    }
+    // Other undefined names get the warning for undefined symbols.
+    let like_number = text.starts_with(|c: char| c.is_ascii_digit());
+    if !is_string && !like_number && !matches!(text.as_str(), "y" | "n" | "m") {
+        return;
+    }
+    if !is_valid_number(t, text) {
+        let message = format!("`{text}` is not a valid {} value", t.as_str());
+        push(out, span, &message, DiagSeverity::Warning);
+    }
+}
+
+/// The expression in parentheses, as the Linux parser drops them.
+fn unparen(e: &Expr) -> &Expr {
+    match e {
+        Expr::Paren(inner, _) => unparen(inner),
+        _ => e,
+    }
+}
+
+/// Whether `text` is a value of `t`. Zephyr also accepts leading zeros
+/// and a `-` before a hex number, so they are valid here.
+fn is_valid_number(t: TypeKind, text: &str) -> bool {
+    let digits = text.strip_prefix('-').unwrap_or(text);
+    let digits = match t {
+        TypeKind::Hex => digits
+            .strip_prefix("0x")
+            .or_else(|| digits.strip_prefix("0X"))
+            .unwrap_or(digits),
+        _ => digits,
+    };
+    let is_digit = match t {
+        TypeKind::Hex => u8::is_ascii_hexdigit,
+        _ => u8::is_ascii_digit,
+    };
+    !digits.is_empty() && digits.bytes().all(|b| is_digit(&b))
 }
 
 fn check_help(attrs: &[Attribute], out: &mut Vec<ParseDiagnostic>) {

@@ -223,3 +223,64 @@ config S
         ]
     );
 }
+
+#[test]
+fn int_and_hex_values_must_be_numbers() {
+    let src = "\
+config A
+\tint \"a\"
+\tdefault 010
+\tdefault 0x10 if B
+\tdefault y if B
+\tdefault \"-12\" if B
+\tdefault \"-1a\" if B
+\tdefault ((\"bad\")) if B
+\tdefault C if B
+\tdefault H if B
+\tdefault $(FOO) if B
+\tdefault \"$(BAR)\" if B
+\tdefault UNDEF if B
+\trange 0 S
+
+config B
+\tbool \"b\"
+
+config C
+\tbool
+
+config H
+\thex \"h\"
+\tdefault 10 if B
+\tdefault \"0x\" if B
+\trange 0X0 -0x10
+
+config S
+\tstring \"s\"
+
+config X
+\tdef_hex \"0xZZ\"
+
+configdefault A
+\tdefault \"z\" if B
+";
+    // Zephyr for `def_hex` and `configdefault`.
+    assert_eq!(
+        diags_with(zephyr(), &[("Kconfig", src)]),
+        [
+            diag("0x10", "`0x10` is not a valid int value", WARNING),
+            diag("y", "`y` is not a valid int value", WARNING),
+            diag("\"-1a\"", "`-1a` is not a valid int value", WARNING),
+            diag("\"bad\"", "`bad` is not a valid int value", WARNING),
+            diag("C", "`C` is bool, not int or hex", WARNING),
+            diag("S", "`S` is string, not int or hex", WARNING),
+            diag("\"0x\"", "`0x` is not a valid hex value", WARNING),
+            diag("\"0xZZ\"", "`0xZZ` is not a valid hex value", WARNING),
+            diag("\"z\"", "`z` is not a valid int value", WARNING),
+            diag(
+                "UNDEF",
+                "symbol `UNDEF` is not defined in any open file",
+                WARNING
+            ),
+        ]
+    );
+}
