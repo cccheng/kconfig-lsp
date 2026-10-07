@@ -102,8 +102,7 @@ fn entry_symbol(fa: &FileAnalysis, entry: &Entry) -> Option<DocumentSymbol> {
         }
         Entry::If(i) => {
             let cond = i.condition.span();
-            // Start after `if`, because the span of `!A` starts at `A`.
-            let text = fa.source.get(i.span.start + 2..cond.end).unwrap_or("");
+            let text = fa.source.get(cond.start..cond.end).unwrap_or("");
             let name = std::iter::once("if")
                 .chain(text.split_whitespace())
                 .collect::<Vec<_>>()

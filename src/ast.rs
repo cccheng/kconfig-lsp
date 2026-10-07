@@ -273,7 +273,8 @@ pub struct MainMenuEntry {
 pub enum Expr {
     Symbol(String, Span),
     StringLit(String, Span),
-    Not(Box<Expr>),
+    /// The span covers the `!`.
+    Not(Box<Expr>, Span),
     And(Box<Expr>, Box<Expr>),
     Or(Box<Expr>, Box<Expr>),
     Eq(Box<Expr>, Box<Expr>),
@@ -289,8 +290,7 @@ pub enum Expr {
 impl Expr {
     pub fn span(&self) -> Span {
         match self {
-            Expr::Symbol(_, s) | Expr::StringLit(_, s) | Expr::Paren(_, s) => *s,
-            Expr::Not(e) => e.span(),
+            Expr::Symbol(_, s) | Expr::StringLit(_, s) | Expr::Not(_, s) | Expr::Paren(_, s) => *s,
             Expr::And(a, b)
             | Expr::Or(a, b)
             | Expr::Eq(a, b)
@@ -307,7 +307,7 @@ impl Expr {
         match self {
             Expr::Symbol(name, span) => out.push((name.clone(), *span)),
             Expr::StringLit(..) => {}
-            Expr::Not(e) | Expr::Paren(e, _) => e.collect_symbols(out),
+            Expr::Not(e, _) | Expr::Paren(e, _) => e.collect_symbols(out),
             Expr::And(a, b)
             | Expr::Or(a, b)
             | Expr::Eq(a, b)

@@ -725,9 +725,11 @@ impl<'a> Parser<'a> {
     fn parse_primary_expr(&mut self) -> Expr {
         match self.peek().clone() {
             TokenKind::Not => {
+                let bang = self.current_span();
                 self.pos += 1;
                 let inner = self.parse_primary_expr();
-                Expr::Not(Box::new(inner))
+                let span = bang.merge(inner.span());
+                Expr::Not(Box::new(inner), span)
             }
             TokenKind::OpenParen => {
                 let open = self.current_span();

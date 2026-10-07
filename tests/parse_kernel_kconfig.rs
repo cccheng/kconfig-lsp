@@ -524,6 +524,28 @@ fn attribute_span_ends_after_a_closing_paren() {
 }
 
 #[test]
+fn negation_span_starts_at_the_bang() {
+    for value in ["!B", "!(B || C)", "! !B"] {
+        let src = format!("config A\n\tint \"a\"\n\tdefault {value}\n");
+        let tokens = Lexer::new(&src, &Settings::default()).tokenize();
+        let result = parser::parse(&src, tokens);
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        let Some(Entry::Config(a)) = result.file.entries.first() else {
+            panic!("expected config A");
+        };
+        let span = a
+            .attributes
+            .iter()
+            .find_map(|attr| match attr {
+                Attribute::Default(d) => Some(d.value.span()),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(&src[span.start..span.end], value);
+    }
+}
+
+#[test]
 fn macro_variables_and_calls_make_no_entries() {
     let src = r#"comma := ,
 quote := "

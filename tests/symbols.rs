@@ -84,7 +84,7 @@ configdefault A
             // `😀` is 2 UTF-16 units.
             "A Variable Some(\"Use A 😀\") 2:0-3:16 2:7-2:8",
             "Drivers Module None 5:0-21:7 5:5-5:14",
-            "  if !A && D Namespace None 9:0-13:5 9:5-9:11",
+            "  if !A && D Namespace None 9:0-13:5 9:4-9:11",
             "    B Variable Some(\"B prompt\") 10:0-12:18 10:11-10:12",
             "  Pick one Enum None 15:0-19:9 15:0-15:6",
             "    C1 Variable Some(\"C1\") 17:0-18:10 17:7-17:9",
