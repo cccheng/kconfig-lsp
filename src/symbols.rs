@@ -87,16 +87,23 @@ fn entry_symbol(fa: &FileAnalysis, entry: &Entry) -> Option<DocumentSymbol> {
             ))
         }
         Entry::Choice(c) => {
-            let name = prompt(&c.attributes).unwrap_or_else(|| "choice".to_string());
-            // The span starts at `choice`.
-            let keyword = Span::new(c.span.start, c.span.start + "choice".len());
+            let prompt = prompt(&c.attributes);
+            let (name, detail, selection) = match &c.name {
+                Some((name, span)) if !name.trim().is_empty() => (name.clone(), prompt, *span),
+                _ => {
+                    let name = prompt.unwrap_or_else(|| "choice".to_string());
+                    // The span starts at `choice`.
+                    let keyword = Span::new(c.span.start, c.span.start + "choice".len());
+                    (name, None, keyword)
+                }
+            };
             let children = entry_symbols(fa, &c.entries);
             Some(symbol(
                 fa,
                 name,
-                None,
+                detail,
                 SymbolKind::ENUM,
-                (c.span, keyword),
+                (c.span, selection),
                 Some(children),
             ))
         }

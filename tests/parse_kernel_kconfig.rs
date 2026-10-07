@@ -705,3 +705,61 @@ fn strings_keep_non_ascii_characters() {
         );
     }
 }
+
+#[test]
+fn choice_can_have_a_name() {
+    for (head, want) in [
+        ("choice", None),
+        ("choice # comment", None),
+        ("choice FOO", Some(("FOO", "FOO"))),
+        ("choice FOO # comment", Some(("FOO", "FOO"))),
+        (
+            "choice \"$(module)_CHOICE\"",
+            Some(("$(module)_CHOICE", "\"$(module)_CHOICE\"")),
+        ),
+    ] {
+        let src = format!("{head}\n\tprompt \"pick\"\nconfig C1\n\tbool \"c1\"\nendchoice\n");
+        let tokens = Lexer::new(&src, &Settings::default()).tokenize();
+        let result = parser::parse(&src, tokens);
+        assert!(
+            result.diagnostics.is_empty(),
+            "{src:?}: {:?}",
+            result.diagnostics
+        );
+        let Entry::Choice(choice) = &result.file.entries[0] else {
+            panic!("{src:?}: not a choice");
+        };
+        let name = choice
+            .name
+            .as_ref()
+            .map(|(name, span)| (name.as_str(), &src[span.start..span.end]));
+        assert_eq!(name, want, "{src:?}");
+        assert_eq!(choice.attributes.len(), 1, "{src:?}");
+        assert_eq!(choice.entries.len(), 1, "{src:?}");
+
+        // The name is in its own namespace, so it is no reference.
+        let mut index = WorldIndex::new();
+        index.analyze_file(Path::new("test/Kconfig"), &src);
+        assert!(index.get_references("FOO").is_empty(), "{src:?}");
+    }
+}
+
+#[test]
+fn choice_with_more_than_a_name() {
+    for (head, extra) in [("choice FOO BAR", "BAR"), ("choice bool", "bool")] {
+        let src = format!("{head}\n\tprompt \"pick\"\nconfig C1\n\tbool \"c1\"\nendchoice\n");
+        let tokens = Lexer::new(&src, &Settings::default()).tokenize();
+        let result = parser::parse(&src, tokens);
+        let diags: Vec<_> = result
+            .diagnostics
+            .iter()
+            .map(|d| (&src[d.span.start..d.span.end], d.message.as_str()))
+            .collect();
+        assert_eq!(diags, [(extra, "expected end of line")], "{src:?}");
+        let Entry::Choice(choice) = &result.file.entries[0] else {
+            panic!("{src:?}: not a choice");
+        };
+        assert_eq!(choice.attributes.len(), 1, "{src:?}");
+        assert_eq!(choice.entries.len(), 1, "{src:?}");
+    }
+}

@@ -224,6 +224,8 @@ pub struct HelpAttr {
 
 #[derive(Debug, Clone)]
 pub struct ChoiceEntry {
+    /// The name after `choice`. Zephyr and Linux before 6.9 allow it.
+    pub name: Option<(String, Span)>,
     pub attributes: Vec<Attribute>,
     pub entries: Vec<Entry>,
     pub span: Span,

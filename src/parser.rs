@@ -511,6 +511,14 @@ impl<'a> Parser<'a> {
     fn parse_choice(&mut self) -> Entry {
         let start = self.current_span();
         self.pos += 1; // skip `choice`
+        let name = match self.peek() {
+            TokenKind::Ident(s) | TokenKind::StringLit(s) => {
+                let name = (s.clone(), self.current_span());
+                self.pos += 1;
+                Some(name)
+            }
+            _ => None,
+        };
         self.expect_newline();
 
         let mut attributes = Vec::new();
@@ -543,6 +551,7 @@ impl<'a> Parser<'a> {
         }
 
         Entry::Choice(ChoiceEntry {
+            name,
             attributes,
             entries,
             span: start.merge(end_span),

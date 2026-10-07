@@ -111,6 +111,21 @@ fn outline_names_unnamed_blocks_by_keyword() {
     );
 }
 
+#[test]
+fn outline_names_a_choice_by_its_name() {
+    let src = "choice FOO\n\tprompt \"Pick\"\nendchoice\n\
+               choice \"BAR\"\nendchoice\n\
+               choice \" \"\nendchoice\n";
+    assert_eq!(
+        outline(src),
+        [
+            "FOO Enum Some(\"Pick\") 0:0-2:9 0:7-0:10",
+            "BAR Enum None 3:0-4:9 3:7-3:12",
+            "choice Enum None 5:0-6:9 5:0-5:6",
+        ]
+    );
+}
+
 /// Workspace symbols as `name file range`, with files relative to the
 /// current directory.
 fn search(query: &str) -> Vec<String> {
