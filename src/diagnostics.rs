@@ -14,7 +14,7 @@ pub fn collect(index: &WorldIndex, path: &Path) -> Vec<lsp::Diagnostic> {
 
     let mut diags: Vec<lsp::Diagnostic> = Vec::new();
 
-    for pd in fa.diagnostics.iter().chain(&checks::check(&fa.file)) {
+    for pd in fa.diagnostics.iter().chain(&checks::check(index, &fa.file)) {
         let severity = match pd.severity {
             DiagSeverity::Error => DiagnosticSeverity::ERROR,
             DiagSeverity::Warning => DiagnosticSeverity::WARNING,

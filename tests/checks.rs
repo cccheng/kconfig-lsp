@@ -2,14 +2,24 @@ use std::path::Path;
 
 use kconfig_lsp::analysis::WorldIndex;
 use kconfig_lsp::diagnostics;
+use kconfig_lsp::settings::Settings;
 use tower_lsp::lsp_types::DiagnosticSeverity;
 
 const ERROR: DiagnosticSeverity = DiagnosticSeverity::ERROR;
+const WARNING: DiagnosticSeverity = DiagnosticSeverity::WARNING;
+
+fn diags(files: &[(&str, &str)]) -> Vec<(String, String, DiagnosticSeverity)> {
+    diags_with(Settings::default(), files)
+}
 
 /// Diagnostics of the first file as `(text, message, severity)`. The other
 /// files are indexed too.
-fn diags(files: &[(&str, &str)]) -> Vec<(String, String, DiagnosticSeverity)> {
+fn diags_with(
+    settings: Settings,
+    files: &[(&str, &str)],
+) -> Vec<(String, String, DiagnosticSeverity)> {
     let mut index = WorldIndex::new();
+    index.settings = settings;
     for (path, src) in files {
         index.analyze_file(Path::new(path), src);
     }
@@ -28,6 +38,12 @@ fn diags(files: &[(&str, &str)]) -> Vec<(String, String, DiagnosticSeverity)> {
 
 fn check(src: &str) -> Vec<(String, String, DiagnosticSeverity)> {
     diags(&[("Kconfig", src)])
+}
+
+fn zephyr() -> Settings {
+    Settings {
+        zephyr_extensions: true,
+    }
 }
 
 fn diag(
@@ -63,5 +79,56 @@ endchoice
             diag("help", "more than one help text", ERROR),
             diag("help", "`help` without text", ERROR),
         ]
+    );
+}
+
+#[test]
+fn menuconfig_needs_a_prompt_and_symbols_need_a_type() {
+    let src = "\
+menuconfig A
+\tbool
+\tdepends on B
+
+menuconfig B
+\tbool \"b\"
+
+menuconfig C
+\ttristate
+\tprompt \"c\"
+
+config D
+\tdepends on B
+";
+    assert_eq!(
+        check(src),
+        [
+            diag("A", "menuconfig without a prompt", ERROR),
+            diag("D", "no definition of `D` gives it a type", WARNING),
+        ]
+    );
+    // The type can come from a definition in another file.
+    let other = "config D\n\tbool \"d\"\n";
+    assert_eq!(
+        diags(&[("Kconfig", src), ("other/Kconfig", other)]),
+        [diag("A", "menuconfig without a prompt", ERROR)]
+    );
+    // Zephyr can make the typed definition at build time.
+    assert_eq!(
+        diags_with(zephyr(), &[("Kconfig", src)]),
+        [diag("A", "menuconfig without a prompt", ERROR)]
+    );
+    // A choice gives its type to a member without one.
+    let choice = "\
+choice
+\tbool \"pick\"
+config C1
+\tprompt \"c1\"
+endchoice
+config E
+\tdepends on C1
+";
+    assert_eq!(
+        check(choice),
+        [diag("E", "no definition of `E` gives it a type", WARNING)]
     );
 }
