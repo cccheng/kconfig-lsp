@@ -377,6 +377,8 @@ impl<'a> Parser<'a> {
         self.pos += 1; // skip `depends`
         if *self.peek() == TokenKind::On {
             self.pos += 1;
+        } else {
+            self.diag(start, "expected `on` after `depends`", DiagSeverity::Error);
         }
         let expr = self.parse_expr();
         let condition = self.try_parse_if_condition();
@@ -414,6 +416,8 @@ impl<'a> Parser<'a> {
         self.pos += 1; // skip `visible`
         if *self.peek() == TokenKind::If {
             self.pos += 1;
+        } else {
+            self.diag(start, "expected `if` after `visible`", DiagSeverity::Error);
         }
         let expr = self.parse_expr();
         let span = start.merge(expr.span());

@@ -446,6 +446,42 @@ fn depends_on_with_if_condition() {
 }
 
 #[test]
+fn depends_needs_on_and_visible_needs_if() {
+    for (src, keyword, message) in [
+        (
+            "config A\n\tbool \"a\"\n\tdepends B\n",
+            "depends",
+            "expected `on` after `depends`",
+        ),
+        (
+            "menu \"m\"\n\tvisible B\nendmenu\n",
+            "visible",
+            "expected `if` after `visible`",
+        ),
+    ] {
+        let tokens = Lexer::new(src, &Settings::default()).tokenize();
+        let result = parser::parse(src, tokens);
+        let diags: Vec<_> = result
+            .diagnostics
+            .iter()
+            .map(|d| {
+                (
+                    &src[d.span.start..d.span.end],
+                    d.message.as_str(),
+                    d.severity,
+                )
+            })
+            .collect();
+        assert_eq!(diags, [(keyword, message, DiagSeverity::Error)], "{src:?}");
+
+        // The expression is still read, so `B` stays a reference.
+        let mut index = WorldIndex::new();
+        index.analyze_file(Path::new("test/Kconfig"), src);
+        assert_eq!(index.get_references("B").len(), 1, "{src:?}");
+    }
+}
+
+#[test]
 fn attribute_span_ends_after_a_closing_paren() {
     for (src, want) in [
         (
