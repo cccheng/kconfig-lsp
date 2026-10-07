@@ -66,7 +66,7 @@ kconfig-lsp
 |---|---|
 | Entry keywords | `config` `menuconfig` `choice` `endchoice` `comment` `menu` `endmenu` `if` `endif` `source` `mainmenu` |
 | Type keywords | `bool` `tristate` `string` `hex` `int` |
-| Attribute keywords | `prompt` `default` `def_bool` `def_tristate` `depends` `on` `select` `imply` `visible` `range` `help` `modules` `transitional` `optional` |
+| Attribute keywords | `prompt` `default` `def_bool` `def_tristate` `depends` `on` `select` `imply` `visible` `range` `help` `---help---` `modules` `transitional` `optional` |
 | Operators | `=` `!=` `<` `>` `<=` `>=` `!` `&&` `\|\|` `(` `)` |
 | Literals | `"double quoted"` `'single quoted'` |
 | Macros | `$(cc-option,...)` `$(success,...)` `name = value` `name := value` `name += value` |

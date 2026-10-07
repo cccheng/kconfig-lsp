@@ -763,3 +763,28 @@ fn choice_with_more_than_a_name() {
         assert_eq!(choice.entries.len(), 1, "{src:?}");
     }
 }
+
+#[test]
+fn old_help_keyword_starts_help_text() {
+    let src = "config A\n\tbool \"a\"\n\t---help---\n\t  Old help.\n\nconfig B\n\tbool \"b\"\n";
+    let tokens = Lexer::new(src, &Settings::default()).tokenize();
+    let result = parser::parse(src, tokens);
+    assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+    let help = help_attr(&result.file, "A");
+    assert_eq!(help.text, "Old help.");
+    let keyword = help.keyword_span;
+    assert_eq!(&src[keyword.start..keyword.end], "---help---");
+    assert_eq!(config_names(&result.file), ["A", "B"]);
+}
+
+#[test]
+fn longer_word_is_not_the_old_help_keyword() {
+    for word in ["---help---x", "---help---_", "----help---", "x---help---"] {
+        let src = format!("config A\n\tbool \"a\"\n\t{word}\n");
+        let tokens = Lexer::new(&src, &Settings::default()).tokenize();
+        assert!(
+            !tokens.iter().any(|t| t.kind == TokenKind::Help),
+            "{word} lexed as help"
+        );
+    }
+}

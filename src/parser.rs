@@ -449,6 +449,7 @@ impl<'a> Parser<'a> {
         let (text, text_end) = self.consume_help_text();
         Attribute::Help(HelpAttr {
             text,
+            keyword_span: start,
             span: Span::new(start.start, text_end.unwrap_or(start.end)),
         })
     }

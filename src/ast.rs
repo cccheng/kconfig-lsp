@@ -217,6 +217,8 @@ pub struct RangeAttr {
 #[derive(Debug, Clone)]
 pub struct HelpAttr {
     pub text: String,
+    /// The span of `help` or `---help---`.
+    pub keyword_span: Span,
     pub span: Span,
 }
 

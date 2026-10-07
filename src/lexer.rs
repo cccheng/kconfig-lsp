@@ -308,6 +308,22 @@ impl<'a> Lexer<'a> {
                 }
             }
 
+            // The old name of `help`. Linux removed it in 5.9, but Zephyr
+            // still accepts it.
+            b'-' if self.src[start..].starts_with(OLD_HELP)
+                && !(start > 0 && is_ident_cont(self.bytes[start - 1]))
+                && !self
+                    .bytes
+                    .get(start + OLD_HELP.len())
+                    .is_some_and(|&b| is_ident_cont(b)) =>
+            {
+                self.pos = start + OLD_HELP.len();
+                Token {
+                    kind: TokenKind::Help,
+                    span: Span::new(start, self.pos),
+                }
+            }
+
             _ if is_ident_start(ch) => self.lex_ident(start),
 
             // Skip any unexpected byte gracefully (error recovery).
@@ -432,7 +448,6 @@ impl<'a> Lexer<'a> {
             "visible" => TokenKind::Visible,
             "range" => TokenKind::Range,
             "help" => TokenKind::Help,
-            "---help---" => TokenKind::Help,
             "modules" => TokenKind::Modules,
             "transitional" => TokenKind::Transitional,
             "optional" => TokenKind::Optional,
@@ -450,6 +465,8 @@ pub(crate) fn is_variable_name(tokens: &[Token]) -> bool {
             .all(|t| matches!(t.kind, TokenKind::Ident(_) | TokenKind::Macro(_)))
         && tokens.windows(2).all(|w| w[0].span.end == w[1].span.start)
 }
+
+const OLD_HELP: &str = "---help---";
 
 fn is_ident_start(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_'

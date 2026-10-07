@@ -283,7 +283,7 @@ fn check_help(attrs: &[Attribute], out: &mut Vec<ParseDiagnostic>) {
         _ => None,
     });
     for (i, h) in helps.enumerate() {
-        let keyword = Span::new(h.span.start, h.span.start + "help".len());
+        let keyword = h.keyword_span;
         if i > 0 {
             push(out, keyword, "more than one help text", DiagSeverity::Error);
         }

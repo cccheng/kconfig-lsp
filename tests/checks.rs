@@ -73,12 +73,17 @@ config C1
 \thelp
 \t  Text.
 endchoice
+
+config B
+\tbool \"b\"
+\t---help---
 ";
     assert_eq!(
         check(src),
         [
             diag("help", "more than one help text", ERROR),
             diag("help", "`help` without text", ERROR),
+            diag("---help---", "`help` without text", ERROR),
         ]
     );
 }
