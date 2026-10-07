@@ -284,3 +284,58 @@ configdefault A
         ]
     );
 }
+
+#[test]
+fn transitional_symbol_has_only_a_type_and_help() {
+    let src = "\
+config OLD_A
+\tbool
+\ttransitional
+\tdepends on (y)
+\thelp
+\t  Old name of B.
+
+config OLD_B
+\tbool \"old b\" if B
+\ttransitional
+\tprompt \"old\"
+\tdefault y
+\tdepends on B
+\tdepends on y if B
+\tselect B
+\timply B
+
+config OLD_C
+\tdef_bool B
+\ttransitional
+
+config OLD_N
+\tint
+\trange 0 5
+\ttransitional
+
+config B
+\tbool \"b\"
+";
+    let error = |text| {
+        diag(
+            text,
+            "a transitional symbol can have only a type and help",
+            ERROR,
+        )
+    };
+    assert_eq!(
+        check(src),
+        [
+            error("\"old b\" if B"),
+            error("prompt \"old\""),
+            error("default y"),
+            error("depends on B"),
+            error("depends on y if B"),
+            error("select B"),
+            error("imply B"),
+            error("def_bool B"),
+            error("range 0 5"),
+        ]
+    );
+}

@@ -20,6 +20,7 @@ pub fn check(index: &WorldIndex, file: &KconfigFile) -> Vec<ParseDiagnostic> {
             check_select(index, c, &mut out);
             check_range(index, c, &mut out);
             check_numbers(index, c, &mut out);
+            check_transitional(c, &mut out);
             check_help(&c.attributes, &mut out);
         }
         Entry::ConfigDefault(c) => check_numbers(index, c, &mut out),
@@ -202,6 +203,49 @@ fn is_valid_number(t: TypeKind, text: &str) -> bool {
         _ => u8::is_ascii_digit,
     };
     !digits.is_empty() && digits.bytes().all(|b| is_digit(&b))
+}
+
+/// A transitional symbol can have only a type and help.
+fn check_transitional(c: &ConfigEntry, out: &mut Vec<ParseDiagnostic>) {
+    if !c
+        .attributes
+        .iter()
+        .any(|a| matches!(a, Attribute::Transitional(_)))
+    {
+        return;
+    }
+    for attr in &c.attributes {
+        let span = match attr {
+            Attribute::Type(t) => match &t.prompt {
+                Some(p) => p.span,
+                None => continue,
+            },
+            Attribute::Prompt(p) => p.span,
+            Attribute::Default(d) => d.span,
+            Attribute::DefType(d) => d.span,
+            // Linux allows a dependency that is always `y`.
+            Attribute::DependsOn(d) if d.condition.is_none() && is_yes(&d.expr) => continue,
+            Attribute::VisibleIf(v) if is_yes(&v.expr) => continue,
+            Attribute::DependsOn(d) => d.span,
+            Attribute::Select(s) | Attribute::Imply(s) => s.span,
+            Attribute::VisibleIf(v) => v.span,
+            Attribute::Range(r) => r.span,
+            Attribute::Help(_)
+            | Attribute::Modules(_)
+            | Attribute::Transitional(_)
+            | Attribute::Optional(_) => continue,
+        };
+        push(
+            out,
+            span,
+            "a transitional symbol can have only a type and help",
+            DiagSeverity::Error,
+        );
+    }
+}
+
+fn is_yes(e: &Expr) -> bool {
+    matches!(unparen(e), Expr::Symbol(s, _) if s == "y")
 }
 
 fn check_help(attrs: &[Attribute], out: &mut Vec<ParseDiagnostic>) {
