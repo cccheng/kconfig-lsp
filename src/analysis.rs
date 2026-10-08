@@ -69,7 +69,6 @@ pub struct WorldIndex {
     pub definitions: HashMap<String, Vec<SymbolDef>>,
     pub references: HashMap<String, Vec<SymbolRef>>,
     pub configdefaults: HashMap<String, Vec<ConfigDefaultInfo>>,
-    pub all_symbols: Vec<String>,
     pub files: HashMap<PathBuf, FileAnalysis>,
     pub settings: Settings,
     /// The top directory of the workspace. Most `source` paths start there.
@@ -108,9 +107,6 @@ impl WorldIndex {
                 .entry(d.name.clone())
                 .or_default()
                 .push(d.clone());
-            if !self.all_symbols.contains(&d.name) {
-                self.all_symbols.push(d.name.clone());
-            }
         }
         for r in &refs {
             self.references
@@ -156,7 +152,6 @@ impl WorldIndex {
             infos.retain(|info| info.file.as_os_str() != path);
             !infos.is_empty()
         });
-        self.all_symbols = self.definitions.keys().cloned().collect();
     }
 
     pub fn reanalyze_file(&mut self, path: &Path, source: &str) {

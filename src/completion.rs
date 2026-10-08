@@ -30,15 +30,14 @@ pub fn complete(index: &WorldIndex, path: &Path, pos: Position) -> Option<Comple
     }
 
     let offer_symbols = !prefix.is_empty() || is_symbol_position(index, fa, offset);
-    for sym in &index.all_symbols {
+    // A symbol leaves `definitions` with its last definition, so each key
+    // has one.
+    for (sym, defs) in &index.definitions {
         if offer_symbols && sym.starts_with(&prefix) {
             items.push(CompletionItem {
                 label: sym.clone(),
                 kind: Some(CompletionItemKind::CONSTANT),
-                detail: index
-                    .get_definitions(sym)
-                    .first()
-                    .and_then(|d| d.prompt.clone()),
+                detail: defs.first().and_then(|d| d.prompt.clone()),
                 ..Default::default()
             });
         }

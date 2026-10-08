@@ -223,3 +223,20 @@ fn config_without_a_name_is_no_symbol() {
     syms.sort();
     assert_eq!(syms, ["BAR", "BAZ", "FOO"]);
 }
+
+#[test]
+fn symbol_without_definitions_is_not_offered() {
+    let mut index = WorldIndex::new();
+    let other = Path::new("test/Kconfig.other");
+    index.analyze_file(other, "config OLD\n\tbool \"old\"\n");
+    let path = Path::new("test/Kconfig");
+    index.analyze_file(path, "config A\n\tbool \"a\"\n\tdepends on ");
+    // A change to the other file takes away the last definition of `OLD`.
+    index.reanalyze_file(other, "config NEW\n\tbool \"new\"\n");
+    let mut labels: Vec<String> = match completion::complete(&index, path, Position::new(2, 12)) {
+        Some(CompletionResponse::Array(items)) => items.into_iter().map(|i| i.label).collect(),
+        _ => Vec::new(),
+    };
+    labels.sort();
+    assert_eq!(labels, ["A", "NEW"]);
+}

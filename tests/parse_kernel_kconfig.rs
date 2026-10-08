@@ -272,7 +272,7 @@ fn parse_real_kernel_kconfig() {
 
     let mut index = WorldIndex::new();
     index.analyze_file(&path, &source);
-    assert!(index.all_symbols.len() > 20);
+    assert!(index.definitions.len() > 20);
 }
 
 #[test]
