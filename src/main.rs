@@ -10,6 +10,7 @@ mod lexer;
 mod links;
 mod parser;
 mod references;
+mod rename;
 mod server;
 mod settings;
 mod sources;

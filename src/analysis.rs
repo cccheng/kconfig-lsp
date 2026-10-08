@@ -362,11 +362,11 @@ fn push_ref(name: &str, kind: RefKind, span: Span, file: &Path, refs: &mut Vec<S
     });
 }
 
-fn is_tristate_literal(s: &str) -> bool {
+pub(crate) fn is_tristate_literal(s: &str) -> bool {
     matches!(s, "y" | "n" | "m")
 }
 
-fn is_numeric_literal(s: &str) -> bool {
+pub(crate) fn is_numeric_literal(s: &str) -> bool {
     if s.starts_with("0x") || s.starts_with("0X") {
         s.len() > 2 && s[2..].chars().all(|c| c.is_ascii_hexdigit())
     } else {

@@ -10,6 +10,7 @@ pub mod lexer;
 pub mod links;
 pub mod parser;
 pub mod references;
+pub mod rename;
 pub mod server;
 pub mod settings;
 pub mod sources;

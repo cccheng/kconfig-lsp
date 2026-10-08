@@ -10,7 +10,8 @@ use tower_lsp::{Client, LanguageServer};
 use crate::analysis::WorldIndex;
 use crate::settings::Settings;
 use crate::{
-    completion, definition, diagnostics, folding, hover, links, references, sources, symbols,
+    completion, definition, diagnostics, folding, hover, links, references, rename, sources,
+    symbols,
 };
 
 pub struct Backend {
@@ -138,6 +139,10 @@ impl LanguageServer for Backend {
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 definition_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
+                rename_provider: Some(OneOf::Right(RenameOptions {
+                    prepare_provider: Some(true),
+                    work_done_progress_options: Default::default(),
+                })),
                 completion_provider: Some(CompletionOptions {
                     trigger_characters: Some(vec![" ".into(), "\t".into()]),
                     ..Default::default()
@@ -316,6 +321,45 @@ impl LanguageServer for Backend {
         Ok(references::find_references(&idx, &path, pos))
     }
 
+    async fn prepare_rename(
+        &self,
+        params: TextDocumentPositionParams,
+    ) -> Result<Option<PrepareRenameResponse>> {
+        let idx = self.index.lock().unwrap();
+        let path = match Self::uri_to_path(&params.text_document.uri) {
+            Some(p) => p,
+            None => return Ok(None),
+        };
+        Ok(rename::prepare_rename(&idx, &path, params.position).map(PrepareRenameResponse::Range))
+    }
+
+    async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
+        let position = params.text_document_position;
+        let Some(path) = Self::uri_to_path(&position.text_document.uri) else {
+            return Ok(None);
+        };
+        let mut idx = self.index.lock().unwrap();
+        // The edits must fit the text of the files. A file that the editor
+        // does not have open can be changed on disk after the server read
+        // it, so read all such files again. A file that is gone leaves the
+        // index.
+        let closed: Vec<PathBuf> = idx
+            .files
+            .keys()
+            .filter(|f| !Url::from_file_path(f).is_ok_and(|u| self.documents.contains_key(&u)))
+            .cloned()
+            .collect();
+        for file in closed {
+            match std::fs::read_to_string(&file) {
+                Ok(text) if idx.files[&file].source != text => idx.reanalyze_file(&file, &text),
+                Ok(_) => {}
+                Err(_) => idx.remove_file(&file),
+            }
+        }
+        rename::rename(&idx, &path, position.position, &params.new_name)
+            .map_err(tower_lsp::jsonrpc::Error::invalid_params)
+    }
+
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         let uri = &params.text_document_position.text_document.uri;
         let pos = params.text_document_position.position;
@@ -480,11 +524,11 @@ mod tests {
             editor
         }
 
-        async fn send(&mut self, request: Request) {
+        async fn send(&mut self, request: Request) -> Option<tower_lsp::jsonrpc::Response> {
             std::future::poll_fn(|cx| self.service.poll_ready(cx))
                 .await
                 .unwrap();
-            self.service.call(request).await.unwrap();
+            self.service.call(request).await.unwrap()
         }
 
         async fn notify(&mut self, method: &'static str, params: impl serde::Serialize) {
@@ -640,6 +684,58 @@ mod tests {
         let backend = editor.backend();
         assert!(backend.index.lock().unwrap().files.contains_key(&new));
         assert!(backend.workspace_files.lock().unwrap().contains(&new));
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn rename_reads_files_that_are_not_open_again() {
+        let root = temp_dir("rename-disk");
+        let kconfig = root.join("Kconfig");
+        let other = root.join("Kconfig.b");
+        let text = "config FOO\n\tbool \"foo\"\n";
+        std::fs::write(&kconfig, text).unwrap();
+        std::fs::write(&other, "config B\n\tdepends on FOO\n").unwrap();
+        let added = root.join("Kconfig.c");
+        std::fs::write(&added, "config C\n\tbool\n").unwrap();
+        let gone = root.join("Kconfig.d");
+        std::fs::write(&gone, "config D\n\tdepends on FOO\n").unwrap();
+        let mut editor = Editor::start(&root).await;
+        editor.open(&kconfig, text).await;
+        // Another program changes the files after the scan.
+        std::fs::write(&other, "# New line.\nconfig B\n\tdepends on FOO\n").unwrap();
+        std::fs::write(&added, "config C\n\tdepends on FOO\n").unwrap();
+        std::fs::remove_file(&gone).unwrap();
+
+        let uri = Url::from_file_path(&kconfig).unwrap();
+        let params = RenameParams {
+            text_document_position: TextDocumentPositionParams::new(
+                TextDocumentIdentifier::new(uri),
+                Position::new(0, 8),
+            ),
+            new_name: "BAR".to_string(),
+            work_done_progress_params: Default::default(),
+        };
+        let params = serde_json::to_value(params).unwrap();
+        let request = Request::build("textDocument/rename")
+            .id(2)
+            .params(params)
+            .finish();
+        let (_, result) = editor.send(request).await.unwrap().into_parts();
+        let edit: WorkspaceEdit = serde_json::from_value(result.unwrap()).unwrap();
+        let edit_at = |line, start| {
+            let range = Range::new(Position::new(line, start), Position::new(line, start + 3));
+            vec![TextEdit::new(range, "BAR".to_string())]
+        };
+        let uri = |path: &Path| Url::from_file_path(path).unwrap();
+        let changes = edit.changes.unwrap();
+        assert_eq!(
+            changes,
+            HashMap::from([
+                (uri(&kconfig), edit_at(0, 7)),
+                (uri(&other), edit_at(2, 12)),
+                (uri(&added), edit_at(1, 12)),
+            ])
+        );
         std::fs::remove_dir_all(&root).unwrap();
     }
 }
