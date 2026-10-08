@@ -8,6 +8,24 @@ use crate::settings::glob_match;
 /// variable that refers to itself.
 const MAX_DEPTH: usize = 10;
 
+/// What sets the files that the `source` statements of a file name: the
+/// paths of the statements and the macro variables of the file.
+#[derive(PartialEq)]
+pub struct SourceKey {
+    paths: Vec<(String, bool)>,
+    variables: Vec<Variable>,
+}
+
+pub fn source_key(file: &KconfigFile) -> SourceKey {
+    SourceKey {
+        paths: source_entries(file)
+            .into_iter()
+            .map(|e| (e.path.clone(), e.relative))
+            .collect(),
+        variables: file.variables.clone(),
+    }
+}
+
 /// The `source` statements of a file, also those in menus, choices and
 /// `if` blocks.
 pub fn source_entries(file: &KconfigFile) -> Vec<&SourceEntry> {

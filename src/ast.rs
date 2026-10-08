@@ -98,7 +98,7 @@ pub struct KconfigFile {
 }
 
 /// A macro variable assignment, such as `name := value`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Variable {
     pub name: String,
     /// `+=` adds the value to the current value.

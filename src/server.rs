@@ -96,10 +96,20 @@ impl Backend {
     /// `source` statements name if they are not in the index. The named
     /// files are workspace files, also if they are open already, so that
     /// closing them reads them from disk again.
-    fn update_file(&self, path: PathBuf, text: &str) {
+    ///
+    /// After a change, the files are read only if the statements or the
+    /// macro variables changed. When the editor opens the file, they are
+    /// always read, because new files can be on disk.
+    fn update_file(&self, path: PathBuf, text: &str, opened: bool) {
         let sourced = {
             let mut idx = self.index.lock().unwrap();
+            let key =
+                |idx: &WorldIndex| idx.files.get(&path).map(|fa| sources::source_key(&fa.file));
+            let before = key(&idx);
             idx.reanalyze_file(&path, text);
+            if !opened && key(&idx) == before {
+                return;
+            }
             sources::read_sourced_files(&mut idx, vec![path])
         };
         self.workspace_files.lock().unwrap().extend(sourced);
@@ -229,7 +239,7 @@ impl LanguageServer for Backend {
         self.documents.insert(uri.clone(), text.clone());
 
         if let Some(path) = Self::uri_to_path(&uri) {
-            self.update_file(path, &text);
+            self.update_file(path, &text, true);
         }
         self.publish_all_diagnostics().await;
     }
@@ -241,7 +251,7 @@ impl LanguageServer for Backend {
             self.documents.insert(uri.clone(), text.clone());
 
             if let Some(path) = Self::uri_to_path(&uri) {
-                self.update_file(path, &text);
+                self.update_file(path, &text, false);
             }
             self.publish_all_diagnostics().await;
         }
@@ -544,6 +554,19 @@ mod tests {
             self.notify("textDocument/didOpen", params).await;
         }
 
+        async fn change(&mut self, path: &Path, text: &str) {
+            let uri = Url::from_file_path(path).unwrap();
+            let params = DidChangeTextDocumentParams {
+                text_document: VersionedTextDocumentIdentifier::new(uri, 2),
+                content_changes: vec![TextDocumentContentChangeEvent {
+                    range: None,
+                    range_length: None,
+                    text: text.into(),
+                }],
+            };
+            self.notify("textDocument/didChange", params).await;
+        }
+
         async fn close(&mut self, path: &Path) {
             let uri = Url::from_file_path(path).unwrap();
             let text_document = TextDocumentIdentifier::new(uri);
@@ -736,6 +759,46 @@ mod tests {
                 (uri(&added), edit_at(1, 12)),
             ])
         );
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn change_reads_sourced_files_only_if_the_sources_change() {
+        let root = temp_dir("change-sources");
+        let kconfig = root.join("Kconfig");
+        let text = "NAME := Config.x\nsource \"Config.w\"\nsource \"$(NAME)\"\n";
+        std::fs::write(&kconfig, text).unwrap();
+        let mut editor = Editor::start(&root).await;
+        let file = |name: &str| {
+            let path = root.join(name);
+            std::fs::write(&path, format!("config {name}\n")).unwrap();
+            path
+        };
+        let indexed = |editor: &Editor, path: &Path| {
+            let idx = editor.backend().index.lock().unwrap();
+            idx.files.contains_key(path)
+        };
+        // Opening a file reads the files that it names.
+        let w = file("Config.w");
+        editor.open(&kconfig, text).await;
+        assert!(indexed(&editor, &w));
+        let (x, y, z) = (file("Config.x"), file("Config.y"), file("Config.z"));
+
+        // The statements and the variables did not change, so the server
+        // does not look for the files again.
+        editor
+            .change(&kconfig, &format!("# Comment.\n{text}"))
+            .await;
+        assert!(!indexed(&editor, &x));
+
+        let text = "NAME := Config.y\nsource \"Config.w\"\nsource \"$(NAME)\"\n";
+        editor.change(&kconfig, text).await;
+        assert!(indexed(&editor, &y));
+
+        let text = "NAME := Config.y\nsource \"Config.w\"\nsource \"Config.z\"\n";
+        editor.change(&kconfig, text).await;
+        assert!(indexed(&editor, &z));
+        assert!(!indexed(&editor, &x));
         std::fs::remove_dir_all(&root).unwrap();
     }
 }
