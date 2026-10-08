@@ -7,6 +7,7 @@ pub mod diagnostics;
 pub mod folding;
 pub mod hover;
 pub mod lexer;
+pub mod links;
 pub mod parser;
 pub mod references;
 pub mod server;

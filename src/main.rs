@@ -7,6 +7,7 @@ mod diagnostics;
 mod folding;
 mod hover;
 mod lexer;
+mod links;
 mod parser;
 mod references;
 mod server;

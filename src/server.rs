@@ -9,7 +9,9 @@ use tower_lsp::{Client, LanguageServer};
 
 use crate::analysis::WorldIndex;
 use crate::settings::Settings;
-use crate::{completion, definition, diagnostics, folding, hover, references, sources, symbols};
+use crate::{
+    completion, definition, diagnostics, folding, hover, links, references, sources, symbols,
+};
 
 pub struct Backend {
     client: Client,
@@ -121,6 +123,10 @@ impl LanguageServer for Backend {
                 document_symbol_provider: Some(OneOf::Left(true)),
                 workspace_symbol_provider: Some(OneOf::Left(true)),
                 folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
+                document_link_provider: Some(DocumentLinkOptions {
+                    resolve_provider: Some(false),
+                    work_done_progress_options: Default::default(),
+                }),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -310,6 +316,15 @@ impl LanguageServer for Backend {
             None => return Ok(None),
         };
         Ok(folding::folding_ranges(&idx, &path))
+    }
+
+    async fn document_link(&self, params: DocumentLinkParams) -> Result<Option<Vec<DocumentLink>>> {
+        let idx = self.index.lock().unwrap();
+        let path = match Self::uri_to_path(&params.text_document.uri) {
+            Some(p) => p,
+            None => return Ok(None),
+        };
+        Ok(links::document_links(&idx, &path))
     }
 }
 
