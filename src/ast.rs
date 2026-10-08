@@ -93,6 +93,17 @@ fn line_text(text: &str, start: usize) -> &str {
 #[derive(Debug, Clone)]
 pub struct KconfigFile {
     pub entries: Vec<Entry>,
+    /// The macro variable assignments, in the order of the file.
+    pub variables: Vec<Variable>,
+}
+
+/// A macro variable assignment, such as `name := value`.
+#[derive(Debug, Clone)]
+pub struct Variable {
+    pub name: String,
+    /// `+=` adds the value to the current value.
+    pub append: bool,
+    pub value: String,
 }
 
 #[derive(Debug, Clone)]
@@ -261,6 +272,9 @@ pub struct IfEntry {
 pub struct SourceEntry {
     pub path: String,
     pub path_span: Span,
+    /// The path is relative to the directory of the file, as for
+    /// `rsource`, `orsource` and `grsource`.
+    pub relative: bool,
     pub span: Span,
 }
 

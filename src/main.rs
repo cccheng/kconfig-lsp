@@ -11,6 +11,7 @@ mod parser;
 mod references;
 mod server;
 mod settings;
+mod sources;
 mod symbols;
 
 use tower_lsp::{LspService, Server};

@@ -9,7 +9,7 @@ use tower_lsp::{Client, LanguageServer};
 
 use crate::analysis::WorldIndex;
 use crate::settings::Settings;
-use crate::{completion, definition, diagnostics, folding, hover, references, symbols};
+use crate::{completion, definition, diagnostics, folding, hover, references, sources, symbols};
 
 pub struct Backend {
     client: Client,
@@ -65,6 +65,19 @@ impl Backend {
         for uri in open_uris {
             self.publish_diagnostics(&uri).await;
         }
+    }
+
+    /// Analyzes the text of an open file, and reads the files that its
+    /// `source` statements name if they are not in the index. The named
+    /// files are workspace files, also if they are open already, so that
+    /// closing them reads them from disk again.
+    fn update_file(&self, path: PathBuf, text: &str) {
+        let sourced = {
+            let mut idx = self.index.lock().unwrap();
+            idx.reanalyze_file(&path, text);
+            sources::read_sourced_files(&mut idx, vec![path])
+        };
+        self.workspace_files.lock().unwrap().extend(sourced);
     }
 }
 
@@ -137,6 +150,7 @@ impl LanguageServer for Backend {
 
             let mut ws_files = self.workspace_files.lock().unwrap();
             let mut idx = self.index.lock().unwrap();
+            idx.root = Some(root);
             for path in kconfig_files {
                 match std::fs::read_to_string(&path) {
                     Ok(source) => {
@@ -148,6 +162,14 @@ impl LanguageServer for Backend {
                     }
                 }
             }
+            // The patterns can miss files that the read files source.
+            let scanned = ws_files.iter().cloned().collect();
+            let before = ws_files.len();
+            ws_files.extend(sources::read_sourced_files(&mut idx, scanned));
+            log::info!(
+                "found {} more files that source statements name",
+                ws_files.len() - before
+            );
         }
 
         // Await only after the scan, or a didOpen could run in between and
@@ -174,8 +196,7 @@ impl LanguageServer for Backend {
         self.documents.insert(uri.clone(), text.clone());
 
         if let Some(path) = Self::uri_to_path(&uri) {
-            let mut idx = self.index.lock().unwrap();
-            idx.reanalyze_file(&path, &text);
+            self.update_file(path, &text);
         }
         self.publish_all_diagnostics().await;
     }
@@ -187,8 +208,7 @@ impl LanguageServer for Backend {
             self.documents.insert(uri.clone(), text.clone());
 
             if let Some(path) = Self::uri_to_path(&uri) {
-                let mut idx = self.index.lock().unwrap();
-                idx.reanalyze_file(&path, &text);
+                self.update_file(path, &text);
             }
             self.publish_all_diagnostics().await;
         }

@@ -12,10 +12,14 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> ParseResult {
         tokens,
         pos: 0,
         diagnostics: Vec::new(),
+        variables: Vec::new(),
     };
     let entries = p.parse_entries(&[]);
     ParseResult {
-        file: KconfigFile { entries },
+        file: KconfigFile {
+            entries,
+            variables: p.variables,
+        },
         diagnostics: p.diagnostics,
     }
 }
@@ -25,6 +29,7 @@ struct Parser<'a> {
     tokens: Vec<Token>,
     pos: usize,
     diagnostics: Vec<ParseDiagnostic>,
+    variables: Vec<Variable>,
 }
 
 impl<'a> Parser<'a> {
@@ -37,6 +42,10 @@ impl<'a> Parser<'a> {
             .get(i)
             .map(|t| &t.kind)
             .unwrap_or(&TokenKind::Eof)
+    }
+
+    fn span_text(&self, span: Span) -> &'a str {
+        &self.source[span.start..span.end]
     }
 
     fn current_span(&self) -> Span {
@@ -175,9 +184,30 @@ impl<'a> Parser<'a> {
         {
             return false;
         }
+        let name = &self.tokens[self.pos..end];
+        // A name made with macros is not known before expansion.
+        let name = match name {
+            [
+                Token {
+                    kind: TokenKind::Ident(name),
+                    ..
+                },
+            ] => Some(name.clone()),
+            _ => None,
+        };
+        let append = self.span_text(self.tokens[end].span) == "+=";
         end += 1;
-        if matches!(self.peek_at(end), TokenKind::AssignValue(_)) {
+        let mut value = String::new();
+        if let TokenKind::AssignValue(v) = self.peek_at(end) {
+            value = v.clone();
             end += 1;
+        }
+        if let Some(name) = name {
+            self.variables.push(Variable {
+                name,
+                append,
+                value,
+            });
         }
         self.pos = end;
         self.expect_newline();
@@ -639,12 +669,14 @@ impl<'a> Parser<'a> {
 
     fn parse_source(&mut self) -> Entry {
         let start = self.current_span();
+        let relative = matches!(self.span_text(start), "rsource" | "orsource" | "grsource");
         self.pos += 1; // skip `source`
         let (path, path_span) = self.expect_string();
         self.expect_newline();
         Entry::Source(SourceEntry {
             path,
             path_span,
+            relative,
             span: start.merge(path_span),
         })
     }

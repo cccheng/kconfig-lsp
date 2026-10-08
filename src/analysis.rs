@@ -72,6 +72,8 @@ pub struct WorldIndex {
     pub all_symbols: Vec<String>,
     pub files: HashMap<PathBuf, FileAnalysis>,
     pub settings: Settings,
+    /// The top directory of the workspace. Most `source` paths start there.
+    pub root: Option<PathBuf>,
 }
 
 impl WorldIndex {

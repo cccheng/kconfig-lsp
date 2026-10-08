@@ -11,4 +11,5 @@ pub mod parser;
 pub mod references;
 pub mod server;
 pub mod settings;
+pub mod sources;
 pub mod symbols;

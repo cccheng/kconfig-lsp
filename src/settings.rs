@@ -81,7 +81,7 @@ impl Settings {
 
 /// Whether `name` matches `pattern`, in which `*` matches any characters and
 /// `?` matches one character.
-fn glob_match(pattern: &str, name: &str) -> bool {
+pub(crate) fn glob_match(pattern: &str, name: &str) -> bool {
     let p: Vec<char> = pattern.chars().collect();
     let n: Vec<char> = name.chars().collect();
     let (mut pi, mut ni) = (0, 0);
