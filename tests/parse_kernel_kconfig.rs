@@ -165,6 +165,32 @@ fn parser_produces_correct_entries() {
 }
 
 #[test]
+fn analyzing_a_file_again_replaces_its_analysis() {
+    let mut index = WorldIndex::new();
+    index.settings.zephyr_extensions = true;
+    let src = "config A\n\tdepends on B\n\nconfigdefault C\n\tdefault y\n";
+    // The same file, also with its path spelled in other ways.
+    for path in [
+        "test/Kconfig",
+        "test/Kconfig",
+        "test//Kconfig",
+        "test/./Kconfig",
+    ] {
+        index.analyze_file(Path::new(path), src);
+    }
+    assert_eq!(index.files.len(), 1);
+    assert_eq!(index.get_definitions("A").len(), 1);
+    assert_eq!(index.get_references("B").len(), 1);
+    assert_eq!(index.get_configdefaults("C").len(), 1);
+
+    index.remove_file(Path::new("test/Kconfig"));
+    assert!(index.files.is_empty());
+    assert!(index.definitions.is_empty());
+    assert!(index.references.is_empty());
+    assert!(index.configdefaults.is_empty());
+}
+
+#[test]
 fn analysis_finds_all_symbols() {
     let mut index = WorldIndex::new();
     index.analyze_file(Path::new("test/Kconfig"), SAMPLE_KCONFIG);

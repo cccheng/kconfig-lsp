@@ -81,7 +81,11 @@ impl WorldIndex {
         Self::default()
     }
 
+    /// Analyzes a file and adds it to the index. An analysis of the file
+    /// that is in the index already leaves first, also if `path` spells the
+    /// path in another way, such as with `//`.
     pub fn analyze_file(&mut self, path: &Path, source: &str) {
+        self.remove_file(path);
         let tokens = Lexer::new(source, &self.settings).tokenize();
         let result = parser::parse(source, tokens);
         let line_index = LineIndex::new(source);
@@ -133,25 +137,29 @@ impl WorldIndex {
     }
 
     pub fn remove_file(&mut self, path: &Path) {
-        self.files.remove(path);
-
+        let Some((path, _)) = self.files.remove_entry(path) else {
+            return;
+        };
+        // The definitions and references of the file have the path of its
+        // key. Comparing the bytes is much faster than comparing `Path`
+        // components, and each change to a file removes it.
+        let path = path.as_os_str();
         self.definitions.retain(|_, defs| {
-            defs.retain(|d| d.file != path);
+            defs.retain(|d| d.file.as_os_str() != path);
             !defs.is_empty()
         });
         self.references.retain(|_, refs| {
-            refs.retain(|r| r.file != path);
+            refs.retain(|r| r.file.as_os_str() != path);
             !refs.is_empty()
         });
         self.configdefaults.retain(|_, infos| {
-            infos.retain(|info| info.file != path);
+            infos.retain(|info| info.file.as_os_str() != path);
             !infos.is_empty()
         });
         self.all_symbols = self.definitions.keys().cloned().collect();
     }
 
     pub fn reanalyze_file(&mut self, path: &Path, source: &str) {
-        self.remove_file(path);
         self.analyze_file(path, source);
     }
 
