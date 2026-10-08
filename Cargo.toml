@@ -17,6 +17,10 @@ dashmap = "5"
 log = "0.4"
 env_logger = "0.10"
 
+[dev-dependencies]
+futures = "0.3"
+tower-service = "0.3"
+
 [profile.release]
 opt-level = 2
 lto = true

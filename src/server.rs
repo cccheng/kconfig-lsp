@@ -54,9 +54,31 @@ impl Backend {
             };
             diagnostics::collect(&idx, &path)
         };
+        // A close can come while a change publishes. Then the closed file
+        // keeps the empty list that the close published.
+        if !self.documents.contains_key(uri) {
+            return;
+        }
         self.client
             .publish_diagnostics(uri.clone(), diags, None)
             .await;
+    }
+
+    /// Whether `path` is in the workspace and its name matches
+    /// `kconfig_files`.
+    fn matches_kconfig_files(&self, path: &Path) -> bool {
+        let in_root = self
+            .workspace_root
+            .lock()
+            .unwrap()
+            .as_ref()
+            .is_some_and(|root| path.starts_with(root));
+        let settings = self.settings.lock().unwrap();
+        in_root
+            && path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| settings.is_kconfig_file(n))
     }
 
     /// The diagnostics of a file can depend on other files, such as for
@@ -227,14 +249,31 @@ impl LanguageServer for Backend {
         let Some(path) = Self::uri_to_path(&uri) else {
             return;
         };
-        let is_workspace_file = self.workspace_files.lock().unwrap().contains(&path);
-        if !is_workspace_file {
-            return;
-        }
-        if let Ok(source) = std::fs::read_to_string(&path) {
+        // A file can come into the workspace after the scan.
+        let is_workspace_file = self.workspace_files.lock().unwrap().contains(&path)
+            || self.matches_kconfig_files(&path);
+        // A workspace file goes back to its text on disk. A file that is not
+        // in the workspace, or that is not on disk now, leaves the index.
+        let source = is_workspace_file
+            .then(|| std::fs::read_to_string(&path).ok())
+            .flatten();
+        {
             let mut idx = self.index.lock().unwrap();
-            idx.reanalyze_file(&path, &source);
+            match &source {
+                Some(source) => idx.reanalyze_file(&path, source),
+                None => idx.remove_file(&path),
+            }
         }
+        {
+            let mut workspace_files = self.workspace_files.lock().unwrap();
+            match source {
+                Some(_) => workspace_files.insert(path),
+                None => workspace_files.remove(&path),
+            };
+        }
+        // The server publishes diagnostics only for open files. So remove
+        // those of the closed file, or the editor keeps them.
+        self.client.publish_diagnostics(uri, Vec::new(), None).await;
         self.publish_all_diagnostics().await;
     }
 
@@ -399,5 +438,208 @@ mod tests {
                 PathBuf::from("package/foo/Config.in")
             ]
         );
+    }
+
+    use std::collections::HashMap;
+
+    use futures::StreamExt;
+    use tokio::sync::mpsc;
+    use tower_lsp::LspService;
+    use tower_lsp::jsonrpc::Request;
+    use tower_service::Service;
+
+    /// Talks to the server as an editor does, and keeps the diagnostics that
+    /// the server publishes.
+    struct Editor {
+        service: LspService<Backend>,
+        messages: mpsc::UnboundedReceiver<Request>,
+    }
+
+    impl Editor {
+        async fn start(root: &Path) -> Self {
+            let (service, socket) = LspService::new(Backend::new);
+            // The server waits until the editor reads each message.
+            let (tx, messages) = mpsc::unbounded_channel();
+            tokio::spawn(socket.for_each(move |m| {
+                let _ = tx.send(m);
+                async {}
+            }));
+            let mut editor = Editor { service, messages };
+            let folder = WorkspaceFolder {
+                uri: Url::from_file_path(root).unwrap(),
+                name: "test".to_string(),
+            };
+            let params = InitializeParams {
+                workspace_folders: Some(vec![folder]),
+                ..Default::default()
+            };
+            let params = serde_json::to_value(params).unwrap();
+            let request = Request::build("initialize").id(1).params(params).finish();
+            editor.send(request).await;
+            editor.notify("initialized", InitializedParams {}).await;
+            editor
+        }
+
+        async fn send(&mut self, request: Request) {
+            std::future::poll_fn(|cx| self.service.poll_ready(cx))
+                .await
+                .unwrap();
+            self.service.call(request).await.unwrap();
+        }
+
+        async fn notify(&mut self, method: &'static str, params: impl serde::Serialize) {
+            let params = serde_json::to_value(params).unwrap();
+            self.send(Request::build(method).params(params).finish())
+                .await;
+        }
+
+        async fn open(&mut self, path: &Path, text: &str) {
+            let uri = Url::from_file_path(path).unwrap();
+            let text_document = TextDocumentItem::new(uri, "kconfig".into(), 1, text.into());
+            let params = DidOpenTextDocumentParams { text_document };
+            self.notify("textDocument/didOpen", params).await;
+        }
+
+        async fn close(&mut self, path: &Path) {
+            let uri = Url::from_file_path(path).unwrap();
+            let text_document = TextDocumentIdentifier::new(uri);
+            let params = DidCloseTextDocumentParams { text_document };
+            self.notify("textDocument/didClose", params).await;
+        }
+
+        /// The diagnostics that the server published since the last call: the
+        /// messages of the last list for each file.
+        async fn diagnostics(&mut self) -> HashMap<PathBuf, Vec<String>> {
+            // The messages arrive in order, so this one comes after all
+            // diagnostics that the server published before.
+            let client = &self.service.inner().client;
+            client.log_message(MessageType::LOG, "end").await;
+            let mut found = HashMap::new();
+            while let Some(message) = self.messages.recv().await {
+                let params = message.params().cloned().unwrap_or_default();
+                match message.method() {
+                    "window/logMessage" if params["message"] == "end" => break,
+                    "textDocument/publishDiagnostics" => {
+                        let p: PublishDiagnosticsParams = serde_json::from_value(params).unwrap();
+                        let messages = p.diagnostics.into_iter().map(|d| d.message);
+                        found.insert(p.uri.to_file_path().unwrap(), messages.collect());
+                    }
+                    _ => {}
+                }
+            }
+            found
+        }
+
+        fn backend(&self) -> &Backend {
+            self.service.inner()
+        }
+    }
+
+    /// An empty directory for one test.
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("kconfig-lsp-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn undefined(name: &str) -> Vec<String> {
+        vec![format!("symbol `{name}` is not defined in the workspace")]
+    }
+
+    #[tokio::test]
+    async fn closing_a_file_outside_the_workspace_drops_it() {
+        let root = temp_dir("close-outside");
+        let kconfig = root.join("Kconfig");
+        let text = "config A\n\tbool \"a\"\n\tdepends on B\n";
+        std::fs::write(&kconfig, text).unwrap();
+        let outside = root.with_extension("Kconfig");
+        let mut editor = Editor::start(&root).await;
+        editor.open(&kconfig, text).await;
+        editor
+            .open(&outside, "config B\n\tbool \"b\"\n\tdepends on C\n")
+            .await;
+        let found = editor.diagnostics().await;
+        assert_eq!(found[&kconfig], Vec::<String>::new());
+        assert_eq!(found[&outside], undefined("C"));
+
+        editor.close(&outside).await;
+        let found = editor.diagnostics().await;
+        assert_eq!(found.get(&outside), Some(&Vec::new()));
+        assert_eq!(found[&kconfig], undefined("B"));
+        let idx = editor.backend().index.lock().unwrap();
+        assert!(!idx.files.contains_key(&outside));
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn closing_a_workspace_file_reads_it_from_disk() {
+        let root = temp_dir("close-workspace");
+        let kconfig = root.join("Kconfig");
+        let other = root.join("Kconfig.b");
+        std::fs::write(&kconfig, "config A\n\tbool \"a\"\n").unwrap();
+        let other_text = "config B\n\tbool \"b\"\n\tdepends on NEW\n";
+        std::fs::write(&other, other_text).unwrap();
+        let mut editor = Editor::start(&root).await;
+        editor.open(&other, other_text).await;
+        // The editor has text that is not on disk.
+        let unsaved = "config A\n\tbool \"a\"\n\nconfig NEW\n\tbool \"new\"\n";
+        editor.open(&kconfig, unsaved).await;
+        let found = editor.diagnostics().await;
+        assert_eq!(found[&other], Vec::<String>::new());
+
+        editor.close(&kconfig).await;
+        let found = editor.diagnostics().await;
+        assert_eq!(found.get(&kconfig), Some(&Vec::new()));
+        assert_eq!(found[&other], undefined("NEW"));
+        let idx = editor.backend().index.lock().unwrap();
+        assert!(idx.files.contains_key(&kconfig));
+        assert!(idx.get_definitions("NEW").is_empty());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn closing_a_workspace_file_that_is_gone_drops_it() {
+        let root = temp_dir("close-gone");
+        let kconfig = root.join("Kconfig");
+        let other = root.join("Kconfig.b");
+        let text = "config A\n\tbool \"a\"\n";
+        std::fs::write(&kconfig, text).unwrap();
+        let other_text = "config B\n\tbool \"b\"\n\tdepends on A\n";
+        std::fs::write(&other, other_text).unwrap();
+        let mut editor = Editor::start(&root).await;
+        editor.open(&other, other_text).await;
+        editor.open(&kconfig, text).await;
+        std::fs::remove_file(&kconfig).unwrap();
+
+        editor.close(&kconfig).await;
+        let found = editor.diagnostics().await;
+        assert_eq!(found[&other], undefined("A"));
+        let backend = editor.backend();
+        assert!(!backend.index.lock().unwrap().files.contains_key(&kconfig));
+        assert!(!backend.workspace_files.lock().unwrap().contains(&kconfig));
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn closing_a_file_made_after_the_scan_reads_it_from_disk() {
+        let root = temp_dir("close-new");
+        let kconfig = root.join("Kconfig");
+        let text = "config A\n\tbool \"a\"\n\tdepends on B\n";
+        std::fs::write(&kconfig, text).unwrap();
+        let mut editor = Editor::start(&root).await;
+        editor.open(&kconfig, text).await;
+        let new = root.join("Kconfig.new");
+        let new_text = "config B\n\tbool \"b\"\n";
+        std::fs::write(&new, new_text).unwrap();
+        editor.open(&new, new_text).await;
+
+        editor.close(&new).await;
+        let found = editor.diagnostics().await;
+        assert_eq!(found[&kconfig], Vec::<String>::new());
+        let backend = editor.backend();
+        assert!(backend.index.lock().unwrap().files.contains_key(&new));
+        assert!(backend.workspace_files.lock().unwrap().contains(&new));
+        std::fs::remove_dir_all(&root).unwrap();
     }
 }
