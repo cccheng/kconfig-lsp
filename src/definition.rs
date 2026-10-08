@@ -3,6 +3,7 @@ use std::path::Path;
 use tower_lsp::lsp_types::*;
 
 use crate::analysis::WorldIndex;
+use crate::sources;
 
 pub fn goto_definition(
     index: &WorldIndex,
@@ -11,6 +12,25 @@ pub fn goto_definition(
 ) -> Option<GotoDefinitionResponse> {
     let fa = index.files.get(path)?;
     let offset = fa.line_index.offset(&fa.source, pos.line, pos.character);
+
+    // On the path of a `source` statement, go to the files that it names.
+    if let Some(entry) = sources::source_entries(&fa.file)
+        .into_iter()
+        .find(|e| (e.path_span.start..e.path_span.end).contains(&offset))
+    {
+        let files = sources::resolve(entry, path, &fa.file.variables, index.root.as_deref());
+        let locations = files
+            .iter()
+            .filter_map(|f| {
+                Some(Location::new(
+                    Url::from_file_path(f).ok()?,
+                    Range::default(),
+                ))
+            })
+            .collect();
+        return response(locations);
+    }
+
     let word = word_at_offset(&fa.source, offset)?;
 
     // `configdefault` blocks come after the definitions.
@@ -39,15 +59,14 @@ pub fn goto_definition(
             })
         })
         .collect();
+    response(locations)
+}
 
-    if locations.is_empty() {
-        None
-    } else if locations.len() == 1 {
-        Some(GotoDefinitionResponse::Scalar(
-            locations.into_iter().next().unwrap(),
-        ))
-    } else {
-        Some(GotoDefinitionResponse::Array(locations))
+fn response(mut locations: Vec<Location>) -> Option<GotoDefinitionResponse> {
+    match locations.len() {
+        0 => None,
+        1 => locations.pop().map(GotoDefinitionResponse::Scalar),
+        _ => Some(GotoDefinitionResponse::Array(locations)),
     }
 }
 

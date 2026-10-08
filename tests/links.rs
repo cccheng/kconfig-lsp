@@ -1,9 +1,9 @@
 use std::path::{Path, PathBuf};
 
 use kconfig_lsp::analysis::WorldIndex;
-use kconfig_lsp::links;
 use kconfig_lsp::settings::Settings;
-use tower_lsp::lsp_types::{Position, Range};
+use kconfig_lsp::{definition, links};
+use tower_lsp::lsp_types::{GotoDefinitionResponse, Location, Position, Range, Url};
 
 /// An empty directory for one test.
 fn temp_dir(name: &str) -> PathBuf {
@@ -122,4 +122,51 @@ fn path_that_names_no_file_or_many_files_gets_no_link() {
 fn no_links_for_a_file_not_in_the_index() {
     let index = WorldIndex::new();
     assert!(links::document_links(&index, Path::new("/no/such/Kconfig")).is_none());
+}
+
+#[test]
+fn goto_on_a_source_path_opens_its_files() {
+    let root = temp_dir("goto");
+    write(&root, "a/Kconfig", "config A\n\tbool \"a\"\n");
+    write(&root, "b/Kconfig", "config B\n\tbool \"b\"\n");
+    let src = "source \"a/Kconfig\"\n\
+               source \"*/Kconfig\"\n\
+               source \"missing/Kconfig\"\n\
+               source \"C\"\n\
+               config C\n\
+               \tdepends on C\n";
+    write(&root, "Kconfig", src);
+    let (index, path) = index_of(&root, "Kconfig");
+    let goto = |line, col| definition::goto_definition(&index, &path, Position::new(line, col));
+    let file = |rel: &str| {
+        Location::new(
+            Url::from_file_path(root.join(rel)).unwrap(),
+            Range::default(),
+        )
+    };
+
+    // The path starts at its opening quote and ends after its closing quote.
+    for col in [7, 9, 17] {
+        assert_eq!(
+            goto(0, col),
+            Some(GotoDefinitionResponse::Scalar(file("a/Kconfig")))
+        );
+    }
+    assert_eq!(goto(0, 18), None);
+    assert_eq!(
+        goto(1, 9),
+        Some(GotoDefinitionResponse::Array(vec![
+            file("a/Kconfig"),
+            file("b/Kconfig")
+        ]))
+    );
+    assert_eq!(goto(2, 9), None);
+    // A path is not a symbol, also if a symbol has its name.
+    assert_eq!(goto(3, 8), None);
+    let c = Location::new(
+        Url::from_file_path(&path).unwrap(),
+        Range::new(Position::new(4, 7), Position::new(4, 8)),
+    );
+    assert_eq!(goto(5, 12), Some(GotoDefinitionResponse::Scalar(c)));
+    std::fs::remove_dir_all(&root).unwrap();
 }

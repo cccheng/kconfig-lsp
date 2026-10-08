@@ -7,7 +7,7 @@ A language server for the Kconfig configuration language used in Linux, Zephyr, 
 | LSP Method | Description |
 |---|---|
 | `textDocument/hover` | Keyword documentation and symbol help text |
-| `textDocument/definition` | Jump to `config` / `menuconfig` definition and `configdefault` blocks |
+| `textDocument/definition` | Jump to `config` / `menuconfig` definition and `configdefault` blocks, and to the files of `source` paths |
 | `textDocument/references` | Find all references to a symbol |
 | `textDocument/completion` | Complete keywords and known symbols |
 | `textDocument/documentSymbol` | Outline of menus, choices, `if` blocks and symbols |
